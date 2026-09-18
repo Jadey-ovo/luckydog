@@ -1,0 +1,45 @@
+{
+  "name": "luckydog",
+  "private": true,
+  "version": "1.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run tests/core.test.ts",
+    "desktop": "npm run build && electron .",
+    "dist:mac": "npm run build && electron-builder --mac --publish never",
+    "dist:win": "npm run build && electron-builder --win --publish never",
+    "test:desktop": "npm run build && node tests/desktop.cjs",
+    "test:web": "playwright test"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "~5.8.2",
+    "vite": "^6.4.3",
+    "electron": "^41.0.0",
+    "electron-builder": "^26.0.12",
+    "tailwindcss": "^3.4.17",
+    "postcss": "^8.5.6",
+    "autoprefixer": "^10.4.21",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/canvas-confetti": "^1.9.0",
+    "vitest": "^4.1.11",
+    "@playwright/test": "^1.58.0",
+    "canvas-confetti": "^1.9.3",
+    "lucide-react": "^0.563.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
+  },
+  "description": "离线桌面抽奖助手",
+  "author": "Aimall",
+  "main": "electron/main.cjs",
+  "homepage": "https://jadey-ovo.github.io/luckydog/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Jadey-ovo/luckydog.git"
+  }
+}

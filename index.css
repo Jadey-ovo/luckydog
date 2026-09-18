@@ -1,0 +1,13 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+button:disabled { cursor: not-allowed; opacity: .35; }
+button:focus-visible { outline: 3px solid #60a5fa; outline-offset: 3px; }
+@media (max-width: 1023px) {
+  main { overflow-y: auto !important; }
+  aside { min-height: 580px; overflow: visible !important; }
+  main > section { min-height: 600px; overflow: visible !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
