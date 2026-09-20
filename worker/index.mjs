@@ -1,4 +1,5 @@
 const WEEK = 7 * 86400000;
+const SESSION_LEASE = 90000;
 const SQL_NOW = "CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)";
 const token = () => Array.from(crypto.getRandomValues(new Uint8Array(24)), b => b.toString(16).padStart(2, '0')).join('');
 const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status }); };
@@ -36,8 +37,8 @@ async function readBody(request) {
 }
 export async function prune(db) {
   await db.batch([
-    db.prepare(`DELETE FROM rooms WHERE expires < ${SQL_NOW}`),
-    db.prepare(`DELETE FROM results WHERE expires < ${SQL_NOW}`),
+    db.prepare(`DELETE FROM rooms WHERE expires < ${SQL_NOW} OR (active_until IS NOT NULL AND active_until < ${SQL_NOW})`),
+    db.prepare(`DELETE FROM results WHERE expires < ${SQL_NOW} OR (active_until IS NOT NULL AND active_until < ${SQL_NOW})`),
   ]);
 }
 export default {
@@ -56,14 +57,15 @@ export default {
         if (![5, 10, 30].includes(durationMinutes)) fail('请选择 5、10 或 30 分钟有效期');
         const id = token(), owner = token(), now = Date.now();
         const joinExpires = now + durationMinutes * 60000;
-        const inserted = await db.prepare(`INSERT INTO rooms (id, owner, join_expires, expires)
-          SELECT ?, ?, ?, ? WHERE (SELECT COUNT(*) FROM rooms WHERE expires >= ${SQL_NOW}) < 10000`)
-          .bind(id, owner, joinExpires, now + WEEK).run();
+        const inserted = await db.prepare(`INSERT INTO rooms (id, owner, join_expires, expires, active_until)
+          SELECT ?, ?, ?, ?, ? WHERE (SELECT COUNT(*) FROM rooms WHERE expires >= ${SQL_NOW}) < 10000`)
+          .bind(id, owner, joinExpires, now + WEEK, now + SESSION_LEASE).run();
         if (!inserted.meta.changes) fail('活动数量已达上限', 503);
         return send(201, { id, owner, joinExpires });
       }
       if (kind === 'rooms' && id) {
-        const room = await db.prepare(`SELECT * FROM rooms WHERE id = ? AND expires >= ${SQL_NOW}`).bind(id).first();
+        const room = await db.prepare(`SELECT * FROM rooms WHERE id = ? AND expires >= ${SQL_NOW}
+          AND (active_until IS NULL OR active_until >= ${SQL_NOW})`).bind(id).first();
         if (!room) fail('邀请已过期或不存在', 404);
         const registrationOpen = !!room.open && Date.now() < room.join_expires;
         if (action === 'join' && request.method === 'POST') {
@@ -80,8 +82,10 @@ export default {
         }
         const owner = request.headers.get('authorization') === `Bearer ${room.owner}`;
         if (request.method === 'GET') {
+          if (owner) await db.prepare('UPDATE rooms SET active_until = ? WHERE id = ?').bind(Date.now() + SESSION_LEASE, id).run();
           const snapshot = await db.batch([
-            db.prepare(`SELECT *, (open = 1 AND join_expires > ${SQL_NOW}) AS registration_open FROM rooms WHERE id = ? AND expires >= ${SQL_NOW}`).bind(id),
+            db.prepare(`SELECT *, (open = 1 AND join_expires > ${SQL_NOW}) AS registration_open FROM rooms WHERE id = ? AND expires >= ${SQL_NOW}
+              AND (active_until IS NULL OR active_until >= ${SQL_NOW})`).bind(id),
             db.prepare(owner ? 'SELECT id, name FROM participants WHERE room_id = ? ORDER BY seq' : 'SELECT COUNT(*) AS count FROM participants WHERE room_id = ?').bind(id),
           ]);
           const current = snapshot[0].results[0];
@@ -91,7 +95,9 @@ export default {
         if (!owner) fail('无权管理此活动', 403);
         if (request.method === 'PATCH') {
           const snapshot = await db.batch([
-            db.prepare(`UPDATE rooms SET open = (? = 1 AND join_expires > ${SQL_NOW}) WHERE id = ? AND expires >= ${SQL_NOW} RETURNING open`).bind(body?.open === true ? 1 : 0, id),
+            db.prepare(`UPDATE rooms SET open = (? = 1 AND join_expires > ${SQL_NOW}), active_until = ?
+              WHERE id = ? AND expires >= ${SQL_NOW} AND (active_until IS NULL OR active_until >= ${SQL_NOW}) RETURNING open`)
+              .bind(body?.open === true ? 1 : 0, Date.now() + SESSION_LEASE, id),
             db.prepare('SELECT id, name FROM participants WHERE room_id = ? ORDER BY seq').bind(id),
           ]);
           if (!snapshot[0].results.length) fail('邀请已过期或不存在', 404);
@@ -105,17 +111,28 @@ export default {
       if (kind === 'results' && !id && request.method === 'POST') {
         if (!Array.isArray(body?.winners) || !body.winners.length || body.winners.length > 5000 || !Number.isFinite(body.timestamp)) fail('中奖名单无效');
         const winners = body.winners.map(p => ({ id: crypto.randomUUID(), name: name(p?.name) }));
-        const id = token();
-        const inserted = await db.prepare(`INSERT INTO results (id, winners, timestamp, expires)
-          SELECT ?, ?, ?, ? WHERE (SELECT COUNT(*) FROM results WHERE expires >= ${SQL_NOW}) < 10000`)
-          .bind(id, JSON.stringify(winners), body.timestamp, Date.now() + WEEK).run();
+        const id = token(), owner = token(), now = Date.now();
+        const inserted = await db.prepare(`INSERT INTO results (id, owner, winners, timestamp, expires, active_until)
+          SELECT ?, ?, ?, ?, ?, ? WHERE (SELECT COUNT(*) FROM results WHERE expires >= ${SQL_NOW}) < 10000`)
+          .bind(id, owner, JSON.stringify(winners), body.timestamp, now + WEEK, now + SESSION_LEASE).run();
         if (!inserted.meta.changes) fail('分享数量已达上限', 503);
-        return send(201, { id });
+        return send(201, { id, owner });
       }
-      if (kind === 'results' && id && request.method === 'GET') {
-        const result = await db.prepare(`SELECT winners, timestamp, expires FROM results WHERE id = ? AND expires >= ${SQL_NOW}`).bind(id).first();
+      if (kind === 'results' && id) {
+        const result = await db.prepare(`SELECT * FROM results WHERE id = ? AND expires >= ${SQL_NOW}
+          AND (active_until IS NULL OR active_until >= ${SQL_NOW})`).bind(id).first();
         if (!result) fail('结果已过期或不存在', 404);
-        return send(200, { ...result, winners: JSON.parse(result.winners) });
+        if (request.method === 'GET') return send(200, { winners: JSON.parse(result.winners), timestamp: result.timestamp, expires: result.expires });
+        const owner = request.headers.get('authorization') === `Bearer ${result.owner}`;
+        if (!owner) fail('无权管理此结果', 403);
+        if (request.method === 'PATCH') {
+          await db.prepare('UPDATE results SET active_until = ? WHERE id = ?').bind(Date.now() + SESSION_LEASE, id).run();
+          return send(200, { ok: true });
+        }
+        if (request.method === 'DELETE') {
+          await db.prepare('DELETE FROM results WHERE id = ?').bind(id).run();
+          return send(200, { ok: true });
+        }
       }
       return send(404, { error: '接口不存在' });
     } catch (error) {

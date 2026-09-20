@@ -7,6 +7,7 @@ export const rooms = sqliteTable('rooms', {
   open: integer('open').notNull().default(1),
   joinExpires: integer('join_expires').notNull(),
   expires: integer('expires').notNull(),
+  activeUntil: integer('active_until'),
 }, table => [index('rooms_expiry').on(table.expires), check('rooms_open_check', sql`${table.open} IN (0, 1)`)]);
 export const participants = sqliteTable('participants', {
   seq: integer('seq').primaryKey({ autoIncrement: true }),
@@ -17,7 +18,9 @@ export const participants = sqliteTable('participants', {
 }, table => [uniqueIndex('participants_room_name').on(table.roomId, table.name), uniqueIndex('participants_room_voter').on(table.roomId, table.voter)]);
 export const results = sqliteTable('results', {
   id: text('id').primaryKey(),
+  owner: text('owner'),
   winners: text('winners').notNull(),
   timestamp: real('timestamp').notNull(),
   expires: integer('expires').notNull(),
+  activeUntil: integer('active_until'),
 }, table => [index('results_expiry').on(table.expires)]);

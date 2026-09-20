@@ -9,7 +9,7 @@ before(async () => {
   // Execute the actual migration, including multi-statement trigger bodies.
   const files = process.env.LUCKYDOG_TEST_SITES
     ? JSON.parse(await readFile('drizzle/meta/_journal.json', 'utf8')).entries.map(entry => `drizzle/${entry.tag}.sql`)
-    : ['migrations/0001_sharing.sql'];
+    : ['migrations/0001_sharing.sql', 'migrations/0002_ephemeral_sessions.sql'];
   for (const file of files) {
     const sql = await readFile(file, 'utf8');
     await db.exec(sql.replace(/--[^\n]*/g, '').replace(/\n/g, ' '));
@@ -89,14 +89,17 @@ test('close racing with joins returns a final consistent list', async () => {
   assert.deepEqual((await api(`rooms/${room.id}`, 'GET', undefined, ownerHeaders(room))).value.participants, closed.value.participants);
 });
 
-test('shared results retain response shape, expire after seven days and scheduled cleanup cascades', async () => {
+test('shared results require their owner session, support heartbeat and cleanup', async () => {
   const start = Date.now();
   const created = await api('results', 'POST', { winners: [{ id: 'local-only', name: '幸运儿' }], timestamp: 123 });
   assert.equal(created.status, 201);
+  assert.match(created.value.owner, /^[a-f0-9]{48}$/);
   const result = await api(`results/${created.value.id}`);
   assert.equal(result.value.timestamp, 123); assert.equal(result.value.winners[0].name, '幸运儿');
   assert.notEqual(result.value.winners[0].id, 'local-only');
   assert.ok(result.value.expires >= start + 7 * 86400000);
+  assert.equal((await api(`results/${created.value.id}`, 'PATCH', {}, { Authorization: 'Bearer wrong' })).status, 403);
+  assert.equal((await api(`results/${created.value.id}`, 'PATCH', {}, ownerHeaders(created.value))).status, 200);
   const room = await create(); await api(`rooms/${room.id}/join`, 'POST', { name: '待清理' });
   await db.prepare('UPDATE rooms SET expires = 0 WHERE id = ?').bind(room.id).run();
   await db.prepare('UPDATE results SET expires = 0 WHERE id = ?').bind(created.value.id).run();
@@ -104,6 +107,25 @@ test('shared results retain response shape, expire after seven days and schedule
   const worker = await mf.getWorker(); await worker.scheduled({ cron: '0 * * * *' });
   assert.equal(await db.prepare('SELECT * FROM rooms WHERE id = ?').bind(room.id).first(), null);
   assert.equal(await db.prepare('SELECT * FROM participants WHERE room_id = ?').bind(room.id).first(), null);
+  assert.equal(await db.prepare('SELECT * FROM results WHERE id = ?').bind(created.value.id).first(), null);
+});
+
+test('result owner can immediately invalidate a shared result', async () => {
+  const created = await api('results', 'POST', { winners: [{ name: '用完即弃' }], timestamp: 123 });
+  assert.equal((await api(`results/${created.value.id}`, 'DELETE', {}, { Authorization: 'Bearer wrong' })).status, 403);
+  assert.equal((await api(`results/${created.value.id}`, 'DELETE', {}, ownerHeaders(created.value))).status, 200);
+  assert.equal((await api(`results/${created.value.id}`)).status, 404);
+});
+
+test('inactive host sessions make invitations and results inaccessible', async () => {
+  const room = await create();
+  const created = await api('results', 'POST', { winners: [{ name: '短暂结果' }], timestamp: 123 });
+  await db.prepare('UPDATE rooms SET active_until = 0 WHERE id = ?').bind(room.id).run();
+  await db.prepare('UPDATE results SET active_until = 0 WHERE id = ?').bind(created.value.id).run();
+  assert.equal((await api(`rooms/${room.id}`)).status, 404);
+  assert.equal((await api(`results/${created.value.id}`)).status, 404);
+  const worker = await mf.getWorker(); await worker.scheduled({ cron: '0 * * * *' });
+  assert.equal(await db.prepare('SELECT * FROM rooms WHERE id = ?').bind(room.id).first(), null);
   assert.equal(await db.prepare('SELECT * FROM results WHERE id = ?').bind(created.value.id).first(), null);
 });
 

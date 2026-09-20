@@ -42,7 +42,7 @@ test('real invitation, duplicate prevention, closed registration and shared resu
  const guest=await browser.newContext();const guestPage=await guest.newPage();await guestPage.goto(url);await guestPage.getByLabel('用户名').fill('扫码来客');await guestPage.getByRole('button',{name:'确认参与'}).click();await expect(guestPage.getByRole('heading',{name:'报名成功'})).toBeVisible();
  await guestPage.reload();await guestPage.getByLabel('用户名').fill('再次报名');await guestPage.getByRole('button',{name:'确认参与'}).click();await expect(guestPage.getByRole('alert')).toHaveText('你已经参与过本次报名');
  await expect(page.getByRole('button',{name:'结束报名并确认名单'})).toBeEnabled();await page.getByRole('button',{name:'结束报名并确认名单'}).click();
- await guestPage.reload();await expect(guestPage.getByText('本次报名已结束')).toBeVisible();
+ await guestPage.reload();await expect(guestPage.getByRole('alert')).toHaveText('邀请已过期或不存在');
  await page.getByRole('button',{name:'确认名单',exact:true}).click();await page.getByRole('button',{name:'开始抽奖'}).click();await expect(page.getByRole('heading',{name:'幸运名单'})).toBeVisible();
  await page.getByRole('button',{name:'分享抽奖结果'}).click();await page.getByRole('button',{name:'生成分享链接'}).click();await expect(link).toBeVisible();await guestPage.goto(await link.inputValue());await expect(guestPage.locator('.winner-card strong')).toHaveText('扫码来客');await guest.close();
 });
@@ -91,4 +91,14 @@ test('Worker serves API JSON even for browser navigation and static assets remai
  expect(unknown.status()).toBe(404);expect(unknown.headers()['content-type']).toContain('application/json');expect(await unknown.json()).toEqual({error:'接口不存在'});
  const page=await request.get('/');expect(page.status()).toBe(200);expect(page.headers()['content-type']).toContain('text/html');
  const template=await request.get('/participants-template.xlsx');expect(template.status()).toBe(200);expect((await template.body()).subarray(0,2).toString()).toBe('PK');
+});
+
+test('wide layout fills the viewport and closing the host invalidates its invitation',async({page,request})=>{
+ await page.setViewportSize({width:1920,height:1080});await page.goto('./');
+ const workspace=await page.locator('.workspace').boundingBox();
+ expect(workspace!.x).toBeLessThanOrEqual(1);expect(workspace!.width).toBeGreaterThanOrEqual(1919);
+ await page.getByRole('tab',{name:'分享邀请'}).click();await page.getByRole('button',{name:'创建抽奖邀请'}).click();
+ const url=await page.getByLabel('分享链接').inputValue();const id=/#join=([a-f0-9]{48})$/.exec(url)![1];
+ await page.close();
+ await expect.poll(async()=>(await request.get(`/api/rooms/${id}`)).status(),{timeout:5000}).toBe(404);
 });

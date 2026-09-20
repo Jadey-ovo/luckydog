@@ -15,6 +15,13 @@
       "when": 1789890485770,
       "tag": "0001_registration-guard",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1789891443431,
+      "tag": "0002_violet_wallop",
+      "breakpoints": true
     }
   ]
 }

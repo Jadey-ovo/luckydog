@@ -8,4 +8,14 @@ export async function api<T>(path: string, method = 'GET', body?: unknown, owner
     return value;
   } catch (error) { throw new Error(error instanceof Error ? error.message : '网络异常，请重试'); }
 }
+
+export function disposeShare(path: string, owner: string) {
+  if (location.protocol === 'file:') return;
+  void fetch(`/api/${path}`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${owner}` },
+    body: '{}',
+    keepalive: true,
+  }).catch(() => {});
+}
 export const shareUrl = (kind: 'join' | 'result', id: string) => new URL(`#${kind}=${id}`, location.href.split('#')[0]).href;

@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { X, ChevronLeft, Check } from 'lucide-react';
 import type { Participant } from '../types';
 import { importParticipants, mergeParticipantNames } from '../services/participants';
-import { api, shareUrl } from '../services/sharing';
+import { api, disposeShare, shareUrl } from '../services/sharing';
 import { ShareLink } from './ShareLink';
 import { Toast } from './Toast';
 type Room = {id:string;owner:string;joinExpires:number};
@@ -26,6 +26,12 @@ export function ParticipantSetup({participants,setParticipants,locked,onReady,on
  const polling=useRef(true);
  const lastPollError=useRef('');
  useEffect(()=>{if(!room)return;const timer=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(timer);},[room]);
+ useEffect(()=>{
+  if(!room)return;
+  const dispose=()=>disposeShare(`rooms/${room.id}`,room.owner);
+  window.addEventListener('pagehide',dispose);
+  return()=>window.removeEventListener('pagehide',dispose);
+ },[room]);
  useEffect(()=>onReady(step==='config'),[step,onReady]);
  useEffect(()=>{
   if(!room || step!=='add')return;
@@ -80,7 +86,11 @@ export function ParticipantSetup({participants,setParticipants,locked,onReady,on
  async function finishInvite(){await run(async()=>{
   if(!room)return;
   polling.current=false;
-  try{const data=await api<{participants:Participant[]}>(`rooms/${room.id}`,'PATCH',{open:false},room.owner);setParticipants(data.participants);setStep('roster');onReset();}catch(e){polling.current=true;throw e;}
+  try{
+   const data=await api<{participants:Participant[]}>(`rooms/${room.id}`,'PATCH',{open:false},room.owner);
+   await api(`rooms/${room.id}`,'DELETE',{},room.owner);
+   setRoom(null);setParticipants(data.participants);setStep('roster');onReset();
+  }catch(e){polling.current=true;throw e;}
  });}
  return <section className="participant-flow">
   <div className="flow-steps" aria-label="配置进度" style={{'--progress':`${['add','roster','config'].indexOf(step)*50}%`} as React.CSSProperties}>
@@ -101,7 +111,7 @@ export function ParticipantSetup({participants,setParticipants,locked,onReady,on
      <label className="file-picker">选择 Excel 文件<input aria-label="导入 Excel 名单" type="file" accept=".xlsx" disabled={busy} onChange={e=>{const file=e.target.files?.[0];e.target.value='';if(file)void loadFile(file);}}/></label>
      <small>{filename?`${filename} · ${fileNames.length} 人`:'仅支持 .xlsx，文件不超过 5 MB'}</small>
     </div>}
-    {mode==='invite'&&<div className="invite-box">{room?<><ShareLink url={shareUrl('join',room.id)} validity={now>=room.joinExpires?'邀请已到期，报名已结束':`剩余 ${Math.ceil((room.joinExpires-now)/60000)} 分钟 · ${new Date(room.joinExpires).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})} 截止`}/><p className="registration-count">已有 <b>{participants.length}</b> 人报名</p></>:<><strong>邀请朋友参与抽奖</strong><ol><li>分享二维码或链接，参与者填写用户名。</li><li>同一浏览器限报一次，同名不可重复报名。</li><li>链接到期自动截止报名，确认名单后即可配置抽奖。报名信息保留七天。</li></ol><fieldset className="invite-duration"><legend>链接有效期</legend><div>{[5,10,30].map(minutes=><button type="button" key={minutes} aria-pressed={duration===minutes} onClick={()=>setDuration(minutes)}>{minutes} 分钟</button>)}</div></fieldset></>}</div>}
+    {mode==='invite'&&<div className="invite-box">{room?<><ShareLink url={shareUrl('join',room.id)} validity={now>=room.joinExpires?'邀请已到期，报名已结束':`剩余 ${Math.ceil((room.joinExpires-now)/60000)} 分钟 · ${new Date(room.joinExpires).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})} 截止`}/><p className="registration-count">已有 <b>{participants.length}</b> 人报名</p></>:<><strong>邀请朋友参与抽奖</strong><ol><li>分享二维码或链接，参与者填写用户名。</li><li>同一浏览器限报一次，同名不可重复报名。</li><li>关闭发起页面或确认名单后，邀请和线上名单会失效。</li></ol><fieldset className="invite-duration"><legend>链接有效期</legend><div>{[5,10,30].map(minutes=><button type="button" key={minutes} aria-pressed={duration===minutes} onClick={()=>setDuration(minutes)}>{minutes} 分钟</button>)}</div></fieldset></>}</div>}
    </div>
    <div className="flow-footer">
     {mode!=='invite'?<button className="import-button" disabled={busy||(!participants.length&&(mode==='input'?!text.trim():!fileNames.length))} onClick={confirmNames}>确认名单</button>:

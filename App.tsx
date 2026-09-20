@@ -11,7 +11,7 @@ import { ParticipantSetup } from './components/ParticipantSetup';
 import { SharedPage } from './components/SharedPage';
 import { Toast } from './components/Toast';
 import { ShareLink } from './components/ShareLink';
-import { api, shareUrl } from './services/sharing';
+import { api, disposeShare, shareUrl } from './services/sharing';
 
 const clamp = (value: number, maximum: number) => Math.min(Math.max(1, value), Math.max(1, maximum));
 
@@ -20,6 +20,7 @@ const App: React.FC = () => {
   const [ready, setReady] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [resultUrl, setResultUrl] = useState('');
+  const [resultShare, setResultShare] = useState<{id:string;owner:string}|null>(null);
   const [shareError, setShareError] = useState('');
   const [sharing, setSharing] = useState(false);
   const [winnerCount, setWinnerCount] = useState(1);
@@ -32,17 +33,30 @@ const App: React.FC = () => {
     setWinnerCount(current => clamp(current, participants.length));
   }, [participants.length]);
 
+  useEffect(() => {
+    if (!resultShare) return;
+    const heartbeat = () => { void api(`results/${resultShare.id}`, 'PATCH', {}, resultShare.owner).catch(() => {}); };
+    const dispose = () => disposeShare(`results/${resultShare.id}`, resultShare.owner);
+    const timer = setInterval(heartbeat, 30000);
+    window.addEventListener('pagehide', dispose);
+    return () => { clearInterval(timer); window.removeEventListener('pagehide', dispose); };
+  }, [resultShare]);
+
   const helperText = useMemo(() => {
     if (!ready) return '先确认参与名单，再设置本轮中奖名额。';
     if (winnerCount === 1) return `${participants.length} 位朋友已经就位，今天的幸运儿会是谁？`;
     return `${participants.length} 位朋友都在场，准备迎接 ${winnerCount} 份好运。`;
   }, [participants.length, winnerCount, ready]);
 
-  const draw = () => { setResultUrl(''); setShareError(''); startDraw(participants, winnerCount); };
+  const clearSharedResult = () => {
+    if (resultShare) disposeShare(`results/${resultShare.id}`, resultShare.owner);
+    setResultShare(null); setResultUrl('');
+  };
+  const draw = () => { clearSharedResult(); setShareError(''); startDraw(participants, winnerCount); };
   const publishResult = async () => {
     if (!currentResult) return;
     setSharing(true); setShareError('');
-    try { const result = await api<{id:string}>('results', 'POST', currentResult); setResultUrl(shareUrl('result', result.id)); }
+    try { const result = await api<{id:string;owner:string}>('results', 'POST', currentResult); setResultShare(result); setResultUrl(shareUrl('result', result.id)); }
     catch (error) { setShareError((error as Error).message); }
     finally { setSharing(false); }
   };
@@ -134,7 +148,7 @@ const App: React.FC = () => {
                 ))}
               </div>
               <div className="result-actions">
-                <button className="primary" onClick={resetDraw}><ChevronLeft size={15} aria-hidden="true"/>返回</button>
+                <button className="primary" onClick={()=>{clearSharedResult();resetDraw();}}><ChevronLeft size={15} aria-hidden="true"/>返回</button>
                 <button onClick={() => setShareOpen(true)}><Share2 size={17} />分享抽奖结果</button>
               </div>
             </div>
@@ -142,7 +156,7 @@ const App: React.FC = () => {
         </section>
       </main>
       <Toast message={shareError} onClose={()=>setShareError('')}/>
-      {shareOpen && <div className="modal-backdrop"><div className="dialog" role="dialog" aria-modal="true" aria-labelledby="share-title"><button className="dialog-close" aria-label="关闭弹窗" disabled={sharing} onClick={()=>setShareOpen(false)}><X size={18}/></button><h2 id="share-title">分享抽奖结果</h2>{resultUrl ? <ShareLink url={resultUrl}/> : <><p>生成链接后，中奖用户名与抽奖时间将上传至分享服务。任何持有链接的人均可查看，七天后过期。</p><button autoFocus disabled={sharing} onClick={publishResult}>{sharing ? '正在生成…' : '生成分享链接'}</button></>}</div></div>}
+      {shareOpen && <div className="modal-backdrop"><div className="dialog" role="dialog" aria-modal="true" aria-labelledby="share-title"><button className="dialog-close" aria-label="关闭弹窗" disabled={sharing} onClick={()=>setShareOpen(false)}><X size={18}/></button><h2 id="share-title">分享抽奖结果</h2>{resultUrl ? <ShareLink url={resultUrl} validity="关闭发起页面后，此链接将失效"/> : <><p>生成链接后，中奖用户名与抽奖时间会临时上传。关闭发起页面后，分享链接随即失效。</p><button autoFocus disabled={sharing} onClick={publishResult}>{sharing ? '正在生成…':'生成分享链接'}</button></>}</div></div>}
     </div>
   );
 };
