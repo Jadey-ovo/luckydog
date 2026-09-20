@@ -10,6 +10,9 @@ export function parseParticipants(raw: string | null): Participant[] {
 }
 export function importParticipants(text: string, existing: Participant[]): Participant[] {
   const names = text.split(/[\n,;，；\s]+/).map(n => n.trim()).filter(Boolean);
+  return mergeParticipantNames(names, existing);
+}
+export function mergeParticipantNames(names: string[], existing: Participant[]): Participant[] {
   const used = new Set(existing.map(p => p.name));
   return [...existing, ...names.map(name => {
     let unique = name;

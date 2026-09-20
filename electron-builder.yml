@@ -11,7 +11,10 @@ files:
   - dist/**/*
   - electron/**/*
   - package.json
-  - '!node_modules/**/*'
+publish:
+  provider: github
+  owner: Jadey-ovo
+  repo: luckydog
 artifactName: '${productName}-${version}-${os}-${arch}.${ext}'
 mac:
   category: public.app-category.utilities

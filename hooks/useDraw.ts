@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import confetti from 'canvas-confetti';
 import { DrawStatus, type DrawResult, type Participant } from '../types';
 import { pickWinners } from '../utils/random';
+import { playCelebrationSound, prepareCelebrationSound } from '../services/celebration';
 export function useDraw() {
   const [status, setStatus] = useState(DrawStatus.IDLE);
   const [currentResult, setCurrentResult] = useState<DrawResult | null>(null);
@@ -11,6 +12,7 @@ export function useDraw() {
   useEffect(() => () => { cleanup(); confetti.reset(); }, []);
   function startDraw(participants: Participant[], count: number) {
     if (timer.current !== null || !Number.isInteger(count) || count < 1 || count > participants.length) return;
+    prepareCelebrationSound();
     const snapshot = participants.map(p => ({ ...p }));
     const winners = pickWinners(snapshot, count);
     setStatus(DrawStatus.DRAWING);
@@ -23,7 +25,9 @@ export function useDraw() {
         cleanup();
         setCurrentResult({ winners, timestamp: Date.now() });
         setStatus(DrawStatus.FINISHED);
-        confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 }, disableForReducedMotion: true });
+        playCelebrationSound();
+        confetti({ particleCount: 180, spread: 110, startVelocity: 45, origin: { x: 0.2, y: 0.65 }, disableForReducedMotion: true });
+        confetti({ particleCount: 180, spread: 110, startVelocity: 45, origin: { x: 0.8, y: 0.65 }, disableForReducedMotion: true });
       }
     }, 100);
   }

@@ -1,0 +1,11 @@
+import { spawn } from 'node:child_process';
+import { rmSync } from 'node:fs';
+const state = '.wrangler/web-tests';
+rmSync(state, { recursive: true, force: true });
+const wrangler = 'node_modules/wrangler/bin/wrangler.js';
+const migrate = spawn(process.execPath, [wrangler, 'd1', 'migrations', 'apply', 'DB', '--local', '--persist-to', state], { stdio: 'inherit' });
+const code = await new Promise(resolve => migrate.on('exit', resolve));
+if (code !== 0) process.exit(code || 1);
+const server = spawn(process.execPath, [wrangler, 'dev', '--local', '--ip', '127.0.0.1', '--port', '4173', '--persist-to', state], { stdio: 'inherit' });
+for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => server.kill(signal));
+server.on('exit', code => process.exit(code || 0));

@@ -1,46 +1,24 @@
 
 <!DOCTYPE html>
-<html lang="zh-CN" class="h-full overflow-hidden">
+<html lang="zh-CN" >
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; form-action 'none'; object-src 'none'; base-uri 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; form-action 'none'; object-src 'none'; base-uri 'self'">
   <meta name="referrer" content="no-referrer">
-  <meta name="description" content="Luckydog 抽奖助手，纯前端随机抽奖，名单不上传。支持 Windows、Mac 和网页试用。">
+  <meta name="description" content="Luckydog 抽奖助手，本地随机抽奖，可选邀请报名与结果分享。支持 Windows、Mac 和网页试用。">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Luckydog 抽奖助手</title>
   <style>
     body {
-      font-family: 'Inter', sans-serif;
-      background-color: #f9fafb;
+      font-family: 'Songti SC', 'STSong', Georgia, serif;
+      background-color: #efe9df;
       height: 100%;
-      overflow: hidden;
-    }
-    @keyframes flicker {
-      0% { opacity: 0.2; transform: scale(0.95); }
-      50% { opacity: 1; transform: scale(1.05); }
-      100% { opacity: 0.2; transform: scale(0.95); }
-    }
-    .animate-flicker {
-      animation: flicker 0.1s infinite;
-    }
-    /* Custom Scrollbar for internal scroll areas */
-    .custom-scrollbar::-webkit-scrollbar {
-      width: 4px;
-    }
-    .custom-scrollbar::-webkit-scrollbar-track {
-      background: #f1f1f1;
-    }
-    .custom-scrollbar::-webkit-scrollbar-thumb {
-      background: #e5e7eb;
-      border-radius: 10px;
-    }
-    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-      background: #d1d5db;
+      overflow: auto;
     }
   </style>
 
 </head>
-<body class="h-full overflow-hidden">
+<body >
   <div id="root" class="h-full"></div>
 <script type="module" src="/index.tsx"></script>
 </body>

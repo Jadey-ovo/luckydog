@@ -6,3 +6,7 @@ work/
 .DS_Store
 test-results/
 playwright-report/
+
+.luckydog-data/
+.wrangler/
+wrangler.deploy.json

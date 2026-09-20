@@ -12,27 +12,43 @@
     "dist:mac": "npm run build && electron-builder --mac --publish never",
     "dist:win": "npm run build && electron-builder --win --publish never",
     "test:desktop": "npm run build && node tests/desktop.cjs",
-    "test:web": "playwright test"
+    "test:web": "npm run build && playwright test",
+    "server": "npm run dev:worker",
+    "server:legacy": "node server/index.mjs",
+    "dev:worker": "npm run build && npm run db:migrate:local && wrangler dev --local --ip 127.0.0.1 --port 3001",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "test:worker": "node --test tests/worker.test.mjs",
+    "cloudflare:config": "node scripts/cloudflare-config.mjs",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote --config wrangler.deploy.json",
+    "deploy:cloudflare": "wrangler deploy --config wrangler.deploy.json",
+    "build:sites": "npm run build && node scripts/stage-sites.mjs",
+    "db:generate:sites": "drizzle-kit generate"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.0",
+    "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^22.14.0",
-    "@vitejs/plugin-react": "^5.0.0",
-    "typescript": "~5.8.2",
-    "vite": "^6.4.3",
-    "electron": "^41.0.0",
-    "electron-builder": "^26.0.12",
-    "tailwindcss": "^3.4.17",
-    "postcss": "^8.5.6",
-    "autoprefixer": "^10.4.21",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "@types/canvas-confetti": "^1.9.0",
-    "vitest": "^4.1.11",
-    "@playwright/test": "^1.58.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "autoprefixer": "^10.4.21",
     "canvas-confetti": "^1.9.3",
+    "drizzle-kit": "^0.31.10",
+    "drizzle-orm": "^0.45.2",
+    "electron": "^41.0.0",
+    "electron-builder": "^26.0.12",
+    "esbuild": "^0.28.2",
     "lucide-react": "^0.563.0",
+    "miniflare": "^4.20260730.0",
+    "postcss": "^8.5.6",
     "react": "^19.2.4",
-    "react-dom": "^19.2.4"
+    "react-dom": "^19.2.4",
+    "tailwindcss": "^3.4.17",
+    "typescript": "~5.8.2",
+    "vite": "^6.4.3",
+    "vitest": "^4.1.11",
+    "wrangler": "^4.135.0"
   },
   "description": "离线桌面抽奖助手",
   "author": "Aimall",
@@ -41,5 +57,10 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/Jadey-ovo/luckydog.git"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9",
+    "exceljs": "^4.4.0",
+    "qrcode": "^1.5.4"
   }
 }
