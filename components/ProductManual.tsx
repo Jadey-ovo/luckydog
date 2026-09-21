@@ -11,10 +11,10 @@ export function ProductManual() {
       <span className="eyebrow">LUCKYDOG GUIDE</span><h2 id="manual-title">产品手册</h2>
       <ol>
         <li><strong>发起报名</strong><span>选择 5、10 或 30 分钟，创建二维码和邀请链接。名单会在发起页面实时更新。</span></li>
-        <li><strong>截止并确认</strong><span>到期会自动停止报名，也可以提前截止；原截止时间之前可以恢复报名。</span></li>
-        <li><strong>开始抽奖</strong><span>同一轮不会重复中奖。开奖后，原二维码和链接会自动显示结果。</span></li>
+        <li><strong>截止并确认</strong><span>到期会自动停止报名，也可以提前截止；原截止时间之前可以继续报名。移除名单中的用户需要二次确认。</span></li>
+        <li><strong>开始抽奖</strong><span>同一轮不会重复中奖。继续抽奖会保留当前名单并可能重复上一轮中奖者，原链接始终显示最近结果。</span></li>
       </ol>
-      <div className="manual-notes"><strong>使用限制</strong><p>邀请和结果只在发起页面打开时有效。刷新、关闭页面或网络中断后，链接会立即或在约 90 秒内失效。请保持发起页面打开直到活动结束。</p><p>用户名会在报名期间临时提交到分享服务；截止后的名单只供本次抽奖使用，不提供历史记录。</p></div>
+      <div className="manual-notes"><strong>使用限制</strong><p>邀请和结果只在发起页面打开时有效。点击“清空返回”会立即删除参与名单和结果并让原链接失效；刷新、关闭页面或网络中断后，链接会立即或在约 90 秒内失效。</p><p>用户名与主动分享的结果会临时提交到分享服务，只供本次活动使用，不提供历史记录。报名截止只停止新增参与者，参与页会保留自己的报名信息并等待开奖结果。</p></div>
     </div></div>,document.body)}
   </>;
 }

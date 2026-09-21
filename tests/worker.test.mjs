@@ -62,6 +62,22 @@ test('concurrent same-name and same-browser registrations have exactly one winne
   }
 });
 
+test('a participant can read only their own registration and owner removal persists', async () => {
+  const room = await create();
+  await api(`rooms/${room.id}/join`, 'POST', { name: '本人信息' }, cookie(91));
+  await api(`rooms/${room.id}/join`, 'POST', { name: '其他用户' }, cookie(92));
+  const self = (await api(`rooms/${room.id}`, 'GET', undefined, cookie(91))).value;
+  assert.equal(self.participant.name, '本人信息');
+  assert.equal(self.participants, undefined);
+  const stranger = (await api(`rooms/${room.id}`)).value;
+  assert.equal(stranger.participant, undefined);
+  const owned = (await api(`rooms/${room.id}`, 'GET', undefined, ownerHeaders(room))).value;
+  const removed = await api(`rooms/${room.id}`, 'PATCH', { removeParticipantId: owned.participants[0].id }, ownerHeaders(room));
+  assert.equal(removed.status, 200);
+  assert.deepEqual(removed.value.participants.map(participant => participant.name), ['其他用户']);
+  assert.equal((await api(`rooms/${room.id}`, 'GET', undefined, cookie(91))).value.participant, undefined);
+});
+
 test('manual closure and deadlines keep owner access but prohibit new joins and reopening after deadline', async () => {
   const room = await create();
   await api(`rooms/${room.id}/join`, 'POST', { name: '已报名' });

@@ -8,8 +8,9 @@ async function createInvite(page:any) {
  return await link.inputValue();
 }
 
-test('invitation registration updates live and early cutoff is confirmed',async({page,browser})=>{
+test('invitation lifecycle keeps the visitor informed and supports redraw or clear',async({page,browser,request})=>{
  const url=await createInvite(page);
+ const id=/#join=([a-f0-9]{48})$/.exec(url)![1];
  await expect(page.locator('.toast-info')).toContainText('报名截止倒计时');
  const guest=await browser.newContext();const guestPage=await guest.newPage();
  await guestPage.goto(url);
@@ -18,7 +19,9 @@ test('invitation registration updates live and early cutoff is confirmed',async(
  await guestPage.getByLabel('用户名').fill('扫码来客');
  await guestPage.getByRole('button',{name:'确认参与'}).click();
  await expect(guestPage.getByRole('heading',{name:'报名成功'})).toBeVisible();
+ await request.post(`/api/rooms/${id}/join`,{headers:{Cookie:`luckydog-voter=${'2'.padStart(48,'0')}`},data:{name:'待移除用户'}});
  await expect(page.getByLabel('实时参与名单')).toContainText('扫码来客');
+ await expect(page.getByLabel('实时参与名单')).toContainText('待移除用户');
  await page.getByRole('button',{name:'截止报名'}).click();
  await expect(page.getByRole('dialog')).toContainText('距离自动截止还有');
  await page.getByRole('button',{name:'继续报名'}).click();
@@ -26,11 +29,19 @@ test('invitation registration updates live and early cutoff is confirmed',async(
  await page.getByRole('button',{name:'截止报名'}).click();
  await page.getByRole('button',{name:'确认截止'}).click();
  await guestPage.reload();
- await expect(guestPage.getByRole('heading',{name:'该活动已结束'})).toBeVisible();
+ await expect(guestPage.getByRole('heading',{name:'报名已截止'})).toBeVisible();
+ await expect(guestPage.getByText('扫码来客')).toBeVisible();
+ await expect(guestPage.getByText(/等待发起人公布抽奖结果/)).toBeVisible();
  await expect(guestPage.getByLabel('用户名')).toHaveCount(0);
+ await page.getByRole('button',{name:'移除 待移除用户'}).click();
+ await expect(page.getByRole('dialog')).toContainText('移除后该用户不会参与');
+ await page.getByRole('button',{name:'取消'}).click();
+ await page.getByRole('button',{name:'移除 待移除用户'}).click();
+ await page.getByRole('button',{name:'确认移除'}).click();
+ await expect(page.getByText('待移除用户')).toHaveCount(0);
  await page.getByRole('button',{name:'继续报名'}).click();
  await expect(page.getByRole('button',{name:'截止报名'})).toBeVisible();
- await guestPage.reload();await expect(guestPage.getByRole('heading',{name:'加入这场好运'})).toBeVisible();
+ await guestPage.reload();await expect(guestPage.getByRole('heading',{name:'报名成功'})).toBeVisible();
  await page.getByRole('button',{name:'截止报名'}).click();await page.getByRole('button',{name:'确认截止'}).click();
  await page.getByRole('button',{name:'确认名单',exact:true}).click();
  await expect(page.locator('.participant-card-name')).toHaveText('扫码来客');
@@ -43,6 +54,18 @@ test('invitation registration updates live and early cutoff is confirmed',async(
  expect(guestPage.url()).toBe(url);
  await page.getByRole('button',{name:'查看活动二维码'}).click();
  await expect(page.getByLabel('分享链接')).toHaveValue(url);
+ await page.getByRole('button',{name:'关闭弹窗'}).click();
+ await page.getByRole('button',{name:'继续抽奖'}).click();
+ await expect(page.getByRole('dialog')).toContainText('可能与上一轮的中奖者重复');
+ await page.getByRole('button',{name:'确认继续抽奖'}).click();
+ await expect(page.getByRole('button',{name:'开始抽奖'})).toBeEnabled();
+ await page.getByRole('button',{name:'开始抽奖'}).click();
+ await expect(page.getByRole('heading',{name:'幸运名单'})).toBeVisible();
+ await page.getByRole('button',{name:'清空返回'}).click();
+ await expect(page.getByRole('dialog')).toContainText('原邀请二维码、邀请链接及参与者正在查看的结果页都会失效');
+ await page.getByRole('button',{name:'确认清空并返回'}).click();
+ await expect(page.getByRole('button',{name:'创建抽奖邀请'})).toBeVisible();
+ await expect.poll(async()=>{await guestPage.reload();return await guestPage.getByRole('heading').first().textContent();},{timeout:10000}).toBe('该活动已失效');
  await guest.close();
 });
 

@@ -2,6 +2,7 @@ const WEEK = 7 * 86400000;
 const SESSION_LEASE = 90000;
 const SQL_NOW = "CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)";
 const token = () => Array.from(crypto.getRandomValues(new Uint8Array(24)), b => b.toString(16).padStart(2, '0')).join('');
+const voterToken = request => /(?:^|;\s*)luckydog-voter=([a-f0-9]{48})(?:;|$)/.exec(request.headers.get('cookie') || '')?.[1];
 const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status }); };
 const name = value => {
   if (typeof value !== 'string' || !value.trim() || value.trim().length > 80) fail('用户名请填写 1–80 个字符');
@@ -74,7 +75,7 @@ export default {
         const registrationOpen = !room.result_winners && !!room.open && Date.now() < room.join_expires;
         if (action === 'join' && request.method === 'POST') {
           if (!registrationOpen) fail('报名已结束', 409);
-          let voter = /(?:^|;\s*)luckydog-voter=([a-f0-9]{48})(?:;|$)/.exec(request.headers.get('cookie') || '')?.[1];
+          let voter = voterToken(request);
           if (!voter) {
             voter = token();
             headers.set('Set-Cookie', `luckydog-voter=${voter}; HttpOnly; SameSite=Strict; Path=/; Max-Age=604800${url.protocol === 'https:' ? '; Secure' : ''}`);
@@ -95,10 +96,19 @@ export default {
           const current = snapshot[0].results[0];
           if (!current) fail('邀请已过期或不存在', 404);
           const result = current.result_winners ? { winners: JSON.parse(current.result_winners), timestamp: current.result_timestamp } : null;
-          return send(200, { ...(owner ? { participants: snapshot[1].results } : { count: snapshot[1].results[0].count }), open: !!current.registration_open, joinExpires: current.join_expires, ...(result ? { result } : {}) });
+          const voter = !owner && voterToken(request);
+          const participant = voter ? await db.prepare('SELECT name FROM participants WHERE room_id = ? AND voter = ?').bind(id, voter).first() : null;
+          return send(200, { ...(owner ? { participants: snapshot[1].results } : { count: snapshot[1].results[0].count, ...(participant ? { participant } : {}) }), open: !!current.registration_open, joinExpires: current.join_expires, ...(result ? { result } : {}) });
         }
         if (!owner) fail('无权管理此活动', 403);
         if (request.method === 'PATCH') {
+          if (body?.removeParticipantId !== undefined) {
+            if (typeof body.removeParticipantId !== 'string' || !body.removeParticipantId) fail('参与者信息无效');
+            await db.prepare('DELETE FROM participants WHERE room_id = ? AND id = ?').bind(id, body.removeParticipantId).run();
+            await db.prepare('UPDATE rooms SET active_until = ? WHERE id = ?').bind(Date.now() + SESSION_LEASE, id).run();
+            const participants = await db.prepare('SELECT id, name FROM participants WHERE room_id = ? ORDER BY seq').bind(id).all();
+            return send(200, { participants: participants.results, open: registrationOpen });
+          }
           if (body?.result !== undefined) {
             const result = drawResult(body.result);
             const updated = await db.prepare(`UPDATE rooms SET open = 0, result_winners = ?, result_timestamp = ?, active_until = ?

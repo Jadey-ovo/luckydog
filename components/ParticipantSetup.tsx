@@ -22,8 +22,8 @@ export function ParticipantSetup({participants,setParticipants,locked,onReady,on
  const [now,setNow]=useState(Date.now());
  const [success,setSuccess]=useState('');
  const [error,setError]=useState('');
- const [back,setBack]=useState(false);
  const [cutoffConfirm,setCutoffConfirm]=useState(false);
+ const [removeCandidate,setRemoveCandidate]=useState<Participant|null>(null);
  const [manualText,setManualText]=useState('');
  const polling=useRef(true);
  const lastPollError=useRef('');
@@ -44,11 +44,15 @@ export function ParticipantSetup({participants,setParticipants,locked,onReady,on
   void poll();const timer=setInterval(poll,2500);
   return()=>{active=false;clearInterval(timer);};
  },[room?.id,step,setParticipants]);
- useEffect(()=>{const key=(e:KeyboardEvent)=>{if(e.key==='Escape'&&!busy){setBack(false);setCutoffConfirm(false);}};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);},[busy]);
+ useEffect(()=>{const key=(e:KeyboardEvent)=>{if(e.key==='Escape'&&!busy){setCutoffConfirm(false);setRemoveCandidate(null);}};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);},[busy]);
 
  async function run(fn:()=>Promise<void>){setBusy(true);setError('');try{await fn();}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
- async function discardRoom(){if(room)await api(`rooms/${room.id}`,'DELETE',{},room.owner);setRoom(null);}
- async function leave(){await run(async()=>{polling.current=false;try{await discardRoom();}catch(e){polling.current=true;throw e;}setParticipants([]);setStep('add');setBack(false);onReset();});}
+ async function removeParticipant(){await run(async()=>{
+  if(!removeCandidate)return;
+  if(room){const data=await api<{participants:Participant[]}>(`rooms/${room.id}`,'PATCH',{removeParticipantId:removeCandidate.id},room.owner);setParticipants(data.participants);}
+  else setParticipants(previous=>previous.filter(item=>item.id!==removeCandidate.id));
+  setSuccess(`已从本次抽奖名单中移除 ${removeCandidate.name}`);setRemoveCandidate(null);onReset();
+ });}
  async function finishInvite(){await run(async()=>{
   if(!room)return;
   const data=await api<{participants:Participant[]}>(`rooms/${room.id}`,'PATCH',{open:false},room.owner);
@@ -86,12 +90,12 @@ export function ParticipantSetup({participants,setParticipants,locked,onReady,on
     <button className="import-button" disabled={busy} onClick={()=>void run(async()=>{const value=await api<Room>('rooms','POST',{durationMinutes:duration});polling.current=true;setParticipants([]);setNow(Date.now());setRoom({...value,open:true});})}>{busy?'正在创建…':'创建抽奖邀请'}</button>}
    </div>
   </>:<>
-   <div className="roster-heading"><strong>当前参与名单 <b>{participants.length}</b></strong><div className="roster-heading-actions">{canResume&&<button disabled={locked||busy} className="back-button resume-button" onClick={()=>void resumeInvite()}>继续报名</button>}<button disabled={locked||busy} className="back-button" onClick={()=>setBack(true)}><ChevronLeft size={15} aria-hidden="true"/>重新报名</button></div></div>
-   <div className="roster-table"><table><thead><tr><th>序号</th><th>用户名</th><th className="remove-column"><span className="sr-only">操作</span></th></tr></thead><tbody>{participants.map((p,index)=><tr key={p.id}><td>{String(index+1).padStart(2,'0')}</td><td>{p.name}</td><td className="remove-column"><button aria-label={`删除 ${p.name}`} disabled={locked||busy} onClick={()=>{setParticipants(previous=>previous.filter(item=>item.id!==p.id));setSuccess('已从本次抽奖名单中移除');}}><X size={14}/></button></td></tr>)}</tbody></table>{!participants.length&&<p className="empty-roster">本次报名暂无参与者</p>}</div>
+   <div className="roster-heading"><strong>当前参与名单 <b>{participants.length}</b></strong>{canResume&&<div className="roster-heading-actions"><button disabled={locked||busy} className="back-button resume-button" onClick={()=>void resumeInvite()}>继续报名</button></div>}</div>
+   <div className="roster-table"><table><thead><tr><th>序号</th><th>用户名</th><th className="remove-column"><span className="sr-only">操作</span></th></tr></thead><tbody>{participants.map((p,index)=><tr key={p.id}><td>{String(index+1).padStart(2,'0')}</td><td>{p.name}</td><td className="remove-column"><button aria-label={`移除 ${p.name}`} disabled={locked||busy} onClick={()=>setRemoveCandidate(p)}><X size={14}/></button></td></tr>)}</tbody></table>{!participants.length&&<p className="empty-roster">本次报名暂无参与者</p>}</div>
    <div className="flow-footer"><button className="import-button" disabled={locked||busy||!participants.length} onClick={()=>setStep('config')}>确认名单</button></div>
   </>}
   <Toast message={toastMessage} status={toastStatus} persistent={!error&&!success&&registrationOpen} dismissible={Boolean(error)} onClose={()=>{setError('');setSuccess('');}}/>
   {cutoffConfirm&&<div className="modal-backdrop"><div className="dialog" role="dialog" aria-modal="true" aria-labelledby="cutoff-title"><button className="dialog-close" aria-label="关闭弹窗" disabled={busy} onClick={()=>setCutoffConfirm(false)}><X size={18}/></button><h2 id="cutoff-title">提前截止报名</h2><p>距离自动截止还有 {room?countdown(room.joinExpires-now):'00:00'}。确认后二维码和链接会立即停止报名。</p><div className="dialog-actions"><button disabled={busy} onClick={()=>setCutoffConfirm(false)}>继续报名</button><button autoFocus className="primary" disabled={busy} onClick={()=>void finishInvite()}>确认截止</button></div></div></div>}
-  {back&&<div className="modal-backdrop"><div className="dialog" role="dialog" aria-modal="true" aria-labelledby="back-title"><button className="dialog-close" aria-label="关闭弹窗" disabled={busy} onClick={()=>setBack(false)}><X size={18}/></button><h2 id="back-title">重新发起报名</h2><p>当前名单会被清空，现有二维码和链接也会失效。</p><div className="dialog-actions"><button disabled={busy} onClick={()=>setBack(false)}>保留当前名单</button><button autoFocus className="primary" disabled={busy} onClick={()=>void leave()}>清空并重新报名</button></div></div></div>}
+  {removeCandidate&&<div className="modal-backdrop"><div className="dialog" role="dialog" aria-modal="true" aria-labelledby="remove-participant-title"><button className="dialog-close" aria-label="关闭弹窗" disabled={busy} onClick={()=>setRemoveCandidate(null)}><X size={18}/></button><h2 id="remove-participant-title">移除参与者</h2><p>确认将“{removeCandidate.name}”从本次抽奖名单中移除吗？移除后该用户不会参与本轮及后续基于当前名单的抽奖。</p><div className="dialog-actions"><button disabled={busy} onClick={()=>setRemoveCandidate(null)}>取消</button><button autoFocus className="danger" disabled={busy} onClick={()=>void removeParticipant()}>{busy?'正在移除…':'确认移除'}</button></div></div></div>}
  </section>;
 }
