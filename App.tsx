@@ -11,6 +11,7 @@ import { ParticipantSetup } from './components/ParticipantSetup';
 import { SharedPage } from './components/SharedPage';
 import { Toast } from './components/Toast';
 import { ShareLink } from './components/ShareLink';
+import { ProductManual } from './components/ProductManual';
 import { api, disposeShare, shareUrl } from './services/sharing';
 
 const clamp = (value: number, maximum: number) => Math.min(Math.max(1, value), Math.max(1, maximum));
@@ -69,6 +70,7 @@ const App: React.FC = () => {
           <div><strong>Luckydog</strong><small>把好运留给这一刻</small></div>
         </div>
         <div className="topbar-actions">
+          <ProductManual />
           <a className="icon-link" href="https://github.com/Jadey-ovo/luckydog" target="_blank" rel="noopener noreferrer" aria-label="打开 GitHub"><Github size={19} /></a>
         </div>
       </header>
@@ -76,7 +78,7 @@ const App: React.FC = () => {
       {!isDesktop && privacyVisible && (
         <div className="privacy-banner" role="status">
           <ShieldCheck size={16} />
-          <span>名单只停留在本次页面，刷新或关闭后自动清空，不会上传。<small>使用邀请或结果分享时，相应信息会提交至分享服务。</small></span>
+          <span>报名名单仅用于本次抽奖，关闭发起页面后失效。<small>参与者提交的用户名和主动分享的结果会临时发送至分享服务。</small></span>
           <a href="./privacy.html" target="_blank" rel="noopener noreferrer">隐私说明</a>
           <a href="https://github.com/Jadey-ovo/luckydog/releases/latest" target="_blank" rel="noopener noreferrer">下载桌面版</a>
           <button onClick={() => setPrivacyVisible(false)} aria-label="关闭隐私提示"><X size={15} /></button>
@@ -92,7 +94,7 @@ const App: React.FC = () => {
             <span className="ready-dot">{canDraw ? '已就绪' : '待配置'}</span>
           </div>
 
-          <ParticipantSetup participants={participants} setParticipants={setParticipants} locked={drawing} onReady={setReady} onReset={resetDraw}>
+          <ParticipantSetup participants={participants} setParticipants={setParticipants} locked={drawing} onReady={setReady} onReset={resetDraw} isDesktop={isDesktop}>
           <section className="setting-block">
             <div className="setting-label"><span>中奖名额</span><small>不超过参与人数</small></div>
             <div className="count-stepper">
@@ -114,13 +116,12 @@ const App: React.FC = () => {
           <div className="stage-orbit orbit-one" />
           <div className="stage-orbit orbit-two" />
           {status === DrawStatus.IDLE && (
-            <div className="idle-state">
-              <span className="stage-kicker">A LITTLE MOMENT OF LUCK</span>
-              <div className="lucky-seal"><i className="globe-ring ring-horizontal"/><i className="globe-ring ring-vertical"/><Sparkles size={30} /><span>LUCKY</span></div>
-              <h1>探索幸运时刻</h1>
-              <p>{helperText}</p>
-              <button className="draw-button" disabled={!canDraw} onClick={draw}><Play size={21} fill="currentColor" />开始抽奖</button>
-              <small>{canDraw ? `将从 ${participants.length} 人中抽出 ${winnerCount} 人` : '完成左侧三步配置后即可开始'}</small>
+            <div className={`idle-state ${participants.length?'has-participants':''}`}>
+              <div className="stage-intro"><span className="stage-kicker">A LITTLE MOMENT OF LUCK</span><h1>{participants.length?'参与名单':'探索幸运时刻'}</h1><p>{helperText}</p></div>
+              {participants.length?<div className={`participant-card-grid ${participants.length>12?'compact':''} ${participants.length>30?'dense':''} ${participants.length>80?'ultra':''}`}>
+                {participants.map((participant,index)=><article className="participant-card" key={participant.id}><span className="participant-avatar">{participant.name.trim().charAt(0).toUpperCase()}</span><span className="participant-card-name">{participant.name}</span><small>{String(index+1).padStart(2,'0')}</small></article>)}
+              </div>:<div className="lucky-seal"><i className="globe-ring ring-horizontal"/><i className="globe-ring ring-vertical"/><Sparkles size={30} /><span>LUCKY</span></div>}
+              <div className="draw-dock"><span className="participant-total">当前已参与 <b>{participants.length}</b> 名用户</span><button className="draw-button" disabled={!canDraw} onClick={draw}><Play size={21} fill="currentColor" />开始抽奖</button><small>{canDraw ? `将从 ${participants.length} 人中抽出 ${winnerCount} 人` : '截止报名并确认名单后即可开始'}</small></div>
             </div>
           )}
 
