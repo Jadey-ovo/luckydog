@@ -50,10 +50,10 @@
     "vitest": "^4.1.11",
     "wrangler": "^4.135.0"
   },
-  "description": "离线桌面抽奖助手",
+  "description": "Sites 在线邀请报名、24 小时个人结果查询与 Windows / Mac 离线抽奖",
   "author": "Aimall",
   "main": "electron/main.cjs",
-  "homepage": "https://jadey-ovo.github.io/luckydog/",
+  "homepage": "https://luckydog-draw.jadey-owo.chatgpt.site/",
   "repository": {
     "type": "git",
     "url": "https://github.com/Jadey-ovo/luckydog.git"

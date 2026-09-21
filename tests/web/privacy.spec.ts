@@ -49,8 +49,10 @@ test('invitation lifecycle keeps the visitor informed and supports redraw or cle
  await expect(page.getByRole('button',{name:'开始抽奖'})).toBeEnabled();
  await page.getByRole('button',{name:'开始抽奖'}).click();
  await expect(page.getByRole('heading',{name:'幸运名单'})).toBeVisible();
- await page.screenshot({path:'test-results/same-link-result.png'});
- await expect(guestPage.getByRole('heading',{name:'幸运名单'})).toBeVisible({timeout:10000});
+ await expect(page.getByRole('button',{name:'返回',exact:true})).toBeDisabled();
+ await expect(page.locator('.toast')).toHaveCount(0,{timeout:10000});
+ await page.screenshot({path:'docs/preview.png',animations:'disabled'});
+ await expect(guestPage.getByRole('heading',{name:'恭喜你中奖啦'})).toBeVisible({timeout:10000});
  expect(guestPage.url()).toBe(url);
  await page.getByRole('button',{name:'查看活动二维码'}).click();
  await expect(page.getByLabel('分享链接')).toHaveValue(url);
@@ -83,7 +85,7 @@ test('product manual is available from the top right',async({page})=>{
  const dialog=page.getByRole('dialog');
  await expect(dialog.getByRole('heading',{name:'产品手册'})).toBeVisible();
  await expect(dialog.locator('li')).toHaveCount(3);
- await expect(dialog).toContainText('约 90 秒内失效');
+ await expect(dialog).toContainText('24 小时');
  await dialog.getByRole('button',{name:'关闭产品手册'}).click();
  await expect(dialog).toHaveCount(0);
 });
@@ -124,9 +126,104 @@ test('Worker serves API JSON and static assets',async({request})=>{
  const page=await request.get('/');expect(page.status()).toBe(200);expect(page.headers()['content-type']).toContain('text/html');
 });
 
-test('wide layout fills the viewport and closing the host invalidates its invitation',async({page,request})=>{
+test('wide layout fills the viewport and closing the host preserves its invitation',async({page,request})=>{
  await page.setViewportSize({width:1920,height:1080});const url=await createInvite(page);
  const workspace=await page.locator('.workspace').boundingBox();expect(workspace!.x).toBeLessThanOrEqual(1);expect(workspace!.width).toBeGreaterThanOrEqual(1919);
  const id=/#join=([a-f0-9]{48})$/.exec(url)![1];await page.close();
- await expect.poll(async()=>(await request.get(`/api/rooms/${id}`)).status(),{timeout:5000}).toBe(404);
+ await expect.poll(async()=>(await request.get(`/api/rooms/${id}`)).status(),{timeout:5000}).toBe(200);
+});
+
+
+test('slow first request never flashes a closed state; recoverable errors and mobile layout',async({page})=>{
+ const id='a'.repeat(48);let release!:()=>void;
+ const gate=new Promise<void>(resolve=>{release=resolve;});
+ await page.route('**/api/rooms/*',async route=>{await gate;await route.fulfill({json:{state:'open',open:true,joinExpires:Date.now()+60000,expires:Date.now()+86400000}});});
+ await page.setViewportSize({width:390,height:844});await page.goto(`./#join=${id}`);
+ await expect(page.getByRole('heading',{name:'正在加载活动…'})).toBeVisible();
+ await expect(page.getByText(/报名已截止|活动已结束|该活动已失效/)).toHaveCount(0);
+ release();await expect(page.getByRole('heading',{name:'加入这场好运'})).toBeVisible();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.unroute('**/api/rooms/*');
+ await page.route('**/api/rooms/*',route=>route.fulfill({status:503,json:{error:'temporarily unavailable'}}));
+ await expect(page.getByRole('heading',{name:'暂时无法读取活动'})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'该活动已失效'})).toHaveCount(0);
+ await page.unroute('**/api/rooms/*');
+ await page.route('**/api/rooms/*',route=>route.fulfill({status:404,json:{error:'gone'}}));
+ await page.getByRole('button',{name:'重试',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'该活动已失效'})).toBeVisible();
+});
+
+test('personal result changes, refresh and host close preserve results without disclosing others',async({page,browser,request})=>{
+ const created=page.waitForResponse(response=>response.url().endsWith('/api/rooms')&&response.request().method()==='POST');
+ await createInvite(page);const room=await (await created).json();
+ const path=`/api/rooms/${room.id}`;const auth={Authorization:`Bearer ${room.owner}`};
+ const guest=await browser.newContext();const visitor=await guest.newPage();
+ await visitor.goto(`./#join=${room.id}`);
+ await visitor.getByLabel('用户名').fill('演示小鹿');await visitor.getByRole('button',{name:'确认参与'}).click();
+ await expect(visitor.getByRole('heading',{name:'报名成功'})).toBeVisible();
+ await request.post(`${path}/join`,{data:{name:'演示小熊'}});
+ const roster=(await (await request.get(path,{headers:auth})).json()).participants;
+ const publish=async(name:string)=>{expect((await request.patch(path,{headers:auth,data:{result:{winners:roster.filter((p:any)=>p.name===name),timestamp:Date.now()}}})).ok()).toBe(true);};
+ await publish('演示小熊');await expect(visitor.getByRole('heading',{name:'本次未中奖'})).toBeVisible();
+ await expect(visitor.getByText('演示小熊')).toHaveCount(0);
+ await publish('演示小鹿');await expect(visitor.getByRole('heading',{name:'恭喜你中奖啦'})).toBeVisible();
+ await visitor.reload();await expect(visitor.getByRole('heading',{name:'恭喜你中奖啦'})).toBeVisible();
+ await page.reload();await expect(page.getByRole('button',{name:'创建抽奖邀请'})).toBeVisible();
+ await visitor.reload();await expect(visitor.getByRole('heading',{name:'恭喜你中奖啦'})).toBeVisible();
+ await page.goto(`./#join=${room.id}`);await expect(page.getByRole('heading',{name:'活动已结束'})).toBeVisible();
+ await expect(page.getByText(/演示小鹿|演示小熊/)).toHaveCount(0);
+ await page.close();await visitor.reload();await expect(visitor.getByRole('heading',{name:'恭喜你中奖啦'})).toBeVisible();
+ await visitor.setViewportSize({width:390,height:844});
+ expect(await visitor.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await visitor.screenshot({path:'docs/participant-result.png',fullPage:true});
+ await guest.close();
+});
+
+test('natural deadline, removal, interrupted and 24 hour expiry states',async({page})=>{
+ const id='b'.repeat(48);let state:any={state:'open',open:true,joinExpires:Date.now()+1500,expires:Date.now()+86400000,participant:{name:'演示小狐'}};
+ await page.route('**/api/rooms/*',route=>route.fulfill({json:state}));
+ await page.goto(`./#join=${id}`);
+ await expect(page.getByRole('heading',{name:'报名成功'})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'报名已截止'})).toBeVisible();
+ state={...state,state:'closed',open:false,participant:undefined};
+ await expect(page.getByText('演示小狐')).toHaveCount(0);
+ state={...state,state:'interrupted'};await expect(page.getByRole('heading',{name:'活动已中断'})).toBeVisible();
+ state={...state,expires:Date.now()-1};await expect(page.getByRole('heading',{name:'该活动已失效'})).toBeVisible();
+});
+
+
+test('failed result sync retries the same draw and clear failure keeps the activity',async({page,request})=>{
+ const url=await createInvite(page);const id=/#join=([a-f0-9]{48})$/.exec(url)![1];
+ await request.post(`/api/rooms/${id}/join`,{data:{name:'重试演示'}});
+ await page.getByRole('button',{name:'截止报名'}).click();await page.getByRole('button',{name:'确认截止'}).click();await page.getByRole('button',{name:'确认名单',exact:true}).click();
+ let failSync=true;let failClear=true;
+ await page.route(`**/api/rooms/${id}`,async route=>{
+  if(route.request().method()==='PATCH'&&route.request().postDataJSON()?.result&&failSync)return route.fulfill({status:503,json:{error:'同步暂时失败'}});
+  if(route.request().method()==='DELETE'&&failClear)return route.fulfill({status:503,json:{error:'清空暂时失败'}});
+  return route.continue();
+ });
+ await page.getByRole('button',{name:'开始抽奖'}).click();await expect(page.getByRole('button',{name:'重试同步开奖结果'})).toBeVisible();
+ await expect(page.getByRole('button',{name:'继续抽奖',exact:true})).toBeDisabled();
+ failSync=false;await page.getByRole('button',{name:'重试同步开奖结果'}).click();
+ await expect(page.getByRole('button',{name:'继续抽奖',exact:true})).toBeEnabled();
+ expect((await (await request.get(`/api/rooms/${id}`)).json()).state).toBe('drawn');
+ await page.getByRole('button',{name:'清空返回'}).click();await page.getByRole('button',{name:'确认清空并返回'}).click();
+ await expect(page.getByRole('dialog')).toBeVisible();expect((await request.get(`/api/rooms/${id}`)).status()).toBe(200);
+ failClear=false;await page.getByRole('button',{name:'确认清空并返回'}).click();
+ await expect(page.getByRole('button',{name:'创建抽奖邀请'})).toBeVisible();expect((await request.get(`/api/rooms/${id}`)).status()).toBe(404);
+});
+
+
+test('interrupted host cannot start a draw and can still clear',async({page,request})=>{
+ const url=await createInvite(page);const id=/#join=([a-f0-9]{48})$/.exec(url)![1];
+ await request.post(`/api/rooms/${id}/join`,{data:{name:'中断演示'}});
+ await page.getByRole('button',{name:'截止报名'}).click();await page.getByRole('button',{name:'确认截止'}).click();await page.getByRole('button',{name:'确认名单',exact:true}).click();
+ await page.route(`**/api/rooms/${id}`,async route=>{
+  if(route.request().method()!=='GET')return route.continue();
+  const response=await route.fetch();const body=await response.json();await route.fulfill({json:{...body,state:'interrupted',open:false}});
+ });
+ await expect(page.getByRole('alert')).toContainText('活动已中断或过期');
+ await expect(page.getByRole('button',{name:'开始抽奖'})).toBeDisabled();
+ await page.getByRole('button',{name:'清空本次活动',exact:true}).click();await page.getByRole('button',{name:'确认清空并返回'}).click();
+ await expect(page.getByRole('button',{name:'创建抽奖邀请'})).toBeVisible();
 });

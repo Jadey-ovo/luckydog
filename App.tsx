@@ -12,7 +12,7 @@ import { SharedPage } from './components/SharedPage';
 import { Toast } from './components/Toast';
 import { ShareLink } from './components/ShareLink';
 import { ProductManual } from './components/ProductManual';
-import { api, disposeShare, shareUrl } from './services/sharing';
+import { api, ApiError, disposeShare, shareUrl } from './services/sharing';
 
 const clamp = (value: number, maximum: number) => Math.min(Math.max(1, value), Math.max(1, maximum));
 
@@ -30,6 +30,8 @@ const App: React.FC = () => {
   const [winnerCount, setWinnerCount] = useState(1);
   const [privacyVisible, setPrivacyVisible] = useState(true);
   const publishedRoomResult = useRef(0);
+  const [syncedResult, setSyncedResult] = useState(0);
+  const [syncRetry, setSyncRetry] = useState(0);
   const { status, currentResult, flickerName, startDraw, resetDraw } = useDraw();
   const drawing = status === DrawStatus.DRAWING;
   const canDraw = ready && participants.length > 0 && winnerCount <= participants.length;
@@ -52,10 +54,10 @@ const App: React.FC = () => {
     publishedRoomResult.current = currentResult.timestamp;
     setSharing(true); setShareError('');
     void api(`rooms/${activeRoom.id}`, 'PATCH', { result: currentResult }, activeRoom.owner)
-      .then(() => setResultUrl(shareUrl('join', activeRoom.id)))
+      .then(() => { setSyncedResult(currentResult.timestamp); setResultUrl(shareUrl('join', activeRoom.id)); })
       .catch(error => { publishedRoomResult.current = 0; setShareError((error as Error).message); })
       .finally(() => setSharing(false));
-  }, [currentResult, activeRoom?.id, activeRoom?.owner, isDesktop]);
+  }, [currentResult, activeRoom?.id, activeRoom?.owner, isDesktop, syncRetry]);
 
   const helperText = useMemo(() => {
     if (!ready) return '先确认参与名单，再设置本轮中奖名额。';
@@ -76,9 +78,9 @@ const App: React.FC = () => {
   const clearActivity = async () => {
     setSharing(true); setShareError('');
     try {
-      if (activeRoom) await api(`rooms/${activeRoom.id}`, 'DELETE', {}, activeRoom.owner);
+      if (activeRoom) { try { await api(`rooms/${activeRoom.id}`, 'DELETE', {}, activeRoom.owner); } catch (error) { if (!(error instanceof ApiError && error.status === 404)) throw error; } }
       if (resultShare) await api(`results/${resultShare.id}`, 'DELETE', {}, resultShare.owner);
-      setResultShare(null); setResultUrl(''); setActiveRoom(null); setParticipants([]); setReady(false);
+      setResultShare(null); setResultUrl(''); setActiveRoom(null); setSyncedResult(0); setParticipants([]); setReady(false);
       setShareOpen(false); setResultAction(null); setParticipantFlowKey(value => value + 1); resetDraw();
     } catch (error) { setShareError((error as Error).message); }
     finally { setSharing(false); }
@@ -107,8 +109,8 @@ const App: React.FC = () => {
       {!isDesktop && privacyVisible && (
         <div className="privacy-banner" role="status">
           <ShieldCheck size={16} />
-          <span className="privacy-summary">报名名单仅用于本次抽奖，关闭发起页面后失效。
-            <span className="info-bubble privacy-info"><button aria-label="查看信息安全说明" aria-describedby="privacy-details"><Info size={15}/></button><span id="privacy-details" role="tooltip">参与者提交的用户名和主动分享的结果会临时发送至分享服务。关闭发起页面会结束活动并清除邀请链接、参与名单和结果访问；关闭通知未送达时，约 90 秒后自动失效。</span></span>
+          <span className="privacy-summary">活动创建后 24 小时内可查询本人结果。
+            <span className="info-bubble privacy-info"><button aria-label="查看信息安全说明" aria-describedby="privacy-details"><Info size={15}/></button><span id="privacy-details" role="tooltip">报名与开奖结果保存在 Sites 托管服务，创建满 24 小时后失效并自动清理。关闭页面不删除已开奖结果；未开奖且连接中断约 90 秒后停止报名。清空活动会立即撤销链接。</span></span>
           </span>
           <a href="./privacy.html" target="_blank" rel="noopener noreferrer">隐私说明</a>
           <a href="https://github.com/Jadey-ovo/luckydog/releases/latest" target="_blank" rel="noopener noreferrer">下载桌面版</a>
@@ -125,7 +127,7 @@ const App: React.FC = () => {
             <span className="ready-dot">{canDraw ? '已就绪' : '待配置'}</span>
           </div>
 
-          <ParticipantSetup key={participantFlowKey} participants={participants} setParticipants={setParticipants} locked={drawing} onReady={setReady} onReset={resetDraw} onRoomChange={setActiveRoom} isDesktop={isDesktop}>
+          <ParticipantSetup key={participantFlowKey} participants={participants} setParticipants={setParticipants} locked={drawing||Boolean(activeRoom&&(syncedResult||currentResult))} onReady={setReady} onReset={resetDraw} onRoomChange={setActiveRoom} isDesktop={isDesktop}>
           <section className="setting-block">
             <div className="setting-label"><span>中奖名额</span><small>不超过参与人数</small></div>
             <div className="count-stepper">
@@ -181,18 +183,20 @@ const App: React.FC = () => {
                 ))}
               </div>
               <div className="result-actions">
-                <button className="primary" onClick={()=>setResultAction('continue')}><RotateCcw size={16} aria-hidden="true"/>继续抽奖</button>
-                <button onClick={()=>setResultAction('clear')}><Trash2 size={16} aria-hidden="true"/>清空返回</button>
-                <button onClick={() => setShareOpen(true)}><Share2 size={17} />{activeRoom?'查看活动二维码':'分享抽奖结果'}</button>
+                <button className="primary" disabled={sharing||Boolean(activeRoom&&syncedResult!==currentResult.timestamp)} onClick={()=>setResultAction('continue')}><RotateCcw size={16} aria-hidden="true"/>继续抽奖</button>
+                <button disabled={sharing} onClick={()=>setResultAction('clear')}><Trash2 size={16} aria-hidden="true"/>清空返回</button>
+                {!isDesktop && <button onClick={() => setShareOpen(true)}><Share2 size={17} />{activeRoom?'查看活动二维码':'分享抽奖结果'}</button>}
               </div>
             </div>
           )}
         </section>
       </main>
+      {activeRoom && status !== DrawStatus.FINISHED && <button className="back-button" disabled={drawing||sharing} onClick={()=>setResultAction('clear')}>清空本次活动</button>}
+      {activeRoom && currentResult && syncedResult!==currentResult.timestamp && <p role="status">{sharing?'正在同步本人开奖结果…':<>开奖结果尚未同步，参与者暂时无法查询本轮结果。<button onClick={()=>{publishedRoomResult.current=0;setSyncRetry(value=>value+1);}}>重试同步开奖结果</button></>}</p>}
       <Toast message={shareError} onClose={()=>setShareError('')}/>
       {resultAction==='continue'&&<div className="modal-backdrop"><div className="dialog" role="dialog" aria-modal="true" aria-labelledby="continue-draw-title"><button className="dialog-close" aria-label="关闭弹窗" onClick={()=>setResultAction(null)}><X size={18}/></button><h2 id="continue-draw-title">继续使用当前名单抽奖</h2><p>当前参与名单会完整保留。下一轮会从整个名单重新随机抽取，因此可能与上一轮的中奖者重复；活动链接会继续显示最近一次完成的结果。</p><div className="dialog-actions"><button onClick={()=>setResultAction(null)}>取消</button><button autoFocus className="primary" onClick={continueDraw}>确认继续抽奖</button></div></div></div>}
       {resultAction==='clear'&&<div className="modal-backdrop"><div className="dialog danger-dialog" role="dialog" aria-modal="true" aria-labelledby="clear-activity-title"><button className="dialog-close" aria-label="关闭弹窗" disabled={sharing} onClick={()=>setResultAction(null)}><X size={18}/></button><h2 id="clear-activity-title">清空本次活动</h2><p>确认后会删除本次参与名单和开奖结果，原邀请二维码、邀请链接及参与者正在查看的结果页都会失效，并返回到新的邀请报名起点。此操作无法撤销。</p><div className="dialog-actions"><button disabled={sharing} onClick={()=>setResultAction(null)}>保留本次活动</button><button autoFocus className="danger" disabled={sharing} onClick={()=>void clearActivity()}>{sharing?'正在清空…':'确认清空并返回'}</button></div></div></div>}
-      {shareOpen && <div className="modal-backdrop"><div className="dialog" role="dialog" aria-modal="true" aria-labelledby="share-title"><button className="dialog-close" aria-label="关闭弹窗" disabled={sharing} onClick={()=>setShareOpen(false)}><X size={18}/></button><h2 id="share-title">{activeRoom?'活动二维码':'分享抽奖结果'}</h2>{activeRoom?<>{resultUrl?<ShareLink url={resultUrl} validity="原报名二维码和链接现已显示抽奖结果"/>:<p>正在把开奖结果同步到原活动链接…</p>}</>:resultUrl ? <ShareLink url={resultUrl} validity="关闭发起页面后，此链接将失效"/> : <><p>生成链接后，中奖用户名与抽奖时间会临时上传。关闭发起页面后，分享链接随即失效。</p><button autoFocus disabled={sharing} onClick={publishResult}>{sharing ? '正在生成…':'生成分享链接'}</button></>}</div></div>}
+      {shareOpen && <div className="modal-backdrop"><div className="dialog" role="dialog" aria-modal="true" aria-labelledby="share-title"><button className="dialog-close" aria-label="关闭弹窗" disabled={sharing} onClick={()=>setShareOpen(false)}><X size={18}/></button><h2 id="share-title">{activeRoom?'活动二维码':'分享抽奖结果'}</h2>{activeRoom?<>{resultUrl?<ShareLink url={resultUrl} validity="原链接仅显示本人结果 · 活动创建后 24 小时内有效"/>:<p>正在把开奖结果同步到原活动链接…</p>}</>:resultUrl ? <ShareLink url={resultUrl} validity="关闭发起页面后，此链接将失效"/> : <><p>生成链接后，中奖用户名与抽奖时间会临时上传。关闭发起页面后，分享链接随即失效。</p><button autoFocus disabled={sharing} onClick={publishResult}>{sharing ? '正在生成…':'生成分享链接'}</button></>}</div></div>}
     </div>
   );
 };

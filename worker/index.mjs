@@ -1,4 +1,5 @@
-const WEEK = 7 * 86400000;
+const DAY = 86400000;
+const WEEK = 7 * DAY;
 const SESSION_LEASE = 90000;
 const SQL_NOW = "CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)";
 const token = () => Array.from(crypto.getRandomValues(new Uint8Array(24)), b => b.toString(16).padStart(2, '0')).join('');
@@ -42,7 +43,7 @@ async function readBody(request) {
 }
 export async function prune(db) {
   await db.batch([
-    db.prepare(`DELETE FROM rooms WHERE expires < ${SQL_NOW} OR (active_until IS NOT NULL AND active_until < ${SQL_NOW})`),
+    db.prepare(`DELETE FROM rooms WHERE expires <= ${SQL_NOW}`),
     db.prepare(`DELETE FROM results WHERE expires < ${SQL_NOW} OR (active_until IS NOT NULL AND active_until < ${SQL_NOW})`),
   ]);
 }
@@ -64,15 +65,15 @@ export default {
         const joinExpires = now + durationMinutes * 60000;
         const inserted = await db.prepare(`INSERT INTO rooms (id, owner, join_expires, expires, active_until)
           SELECT ?, ?, ?, ?, ? WHERE (SELECT COUNT(*) FROM rooms WHERE expires >= ${SQL_NOW}) < 10000`)
-          .bind(id, owner, joinExpires, now + WEEK, now + SESSION_LEASE).run();
+          .bind(id, owner, joinExpires, now + DAY, now + SESSION_LEASE).run();
         if (!inserted.meta.changes) fail('活动数量已达上限', 503);
-        return send(201, { id, owner, joinExpires });
+        return send(201, { id, owner, joinExpires, expires: now + DAY });
       }
       if (kind === 'rooms' && id) {
-        const room = await db.prepare(`SELECT * FROM rooms WHERE id = ? AND expires >= ${SQL_NOW}
-          AND (active_until IS NULL OR active_until >= ${SQL_NOW})`).bind(id).first();
+        const room = await db.prepare(`SELECT * FROM rooms WHERE id = ? AND expires > ${SQL_NOW}`).bind(id).first();
         if (!room) fail('邀请已过期或不存在', 404);
-        const registrationOpen = !room.result_winners && !!room.open && Date.now() < room.join_expires;
+        const interrupted = !room.result_winners && room.active_until !== null && room.active_until <= Date.now();
+        const registrationOpen = !interrupted && !room.result_winners && !!room.open && Date.now() < room.join_expires;
         if (action === 'join' && request.method === 'POST') {
           if (!registrationOpen) fail('报名已结束', 409);
           let voter = voterToken(request);
@@ -87,40 +88,54 @@ export default {
         }
         const owner = request.headers.get('authorization') === `Bearer ${room.owner}`;
         if (request.method === 'GET') {
-          if (owner) await db.prepare('UPDATE rooms SET active_until = ? WHERE id = ?').bind(Date.now() + SESSION_LEASE, id).run();
+          if (owner && !interrupted) await db.prepare(`UPDATE rooms SET active_until = CASE WHEN result_winners IS NULL THEN ? ELSE NULL END WHERE id = ? AND expires > ${SQL_NOW} AND (result_winners IS NOT NULL OR active_until IS NULL OR active_until > ${SQL_NOW})`).bind(Date.now() + SESSION_LEASE, id).run();
           const snapshot = await db.batch([
-            db.prepare(`SELECT *, (open = 1 AND join_expires > ${SQL_NOW}) AS registration_open FROM rooms WHERE id = ? AND expires >= ${SQL_NOW}
-              AND (active_until IS NULL OR active_until >= ${SQL_NOW})`).bind(id),
+            db.prepare(`SELECT *, (open = 1 AND result_winners IS NULL AND join_expires > ${SQL_NOW} AND (active_until IS NULL OR active_until > ${SQL_NOW})) AS registration_open FROM rooms WHERE id = ? AND expires > ${SQL_NOW}`).bind(id),
             db.prepare(owner ? 'SELECT id, name FROM participants WHERE room_id = ? ORDER BY seq' : 'SELECT COUNT(*) AS count FROM participants WHERE room_id = ?').bind(id),
           ]);
           const current = snapshot[0].results[0];
           if (!current) fail('邀请已过期或不存在', 404);
           const result = current.result_winners ? { winners: JSON.parse(current.result_winners), timestamp: current.result_timestamp } : null;
           const voter = !owner && voterToken(request);
-          const participant = voter ? await db.prepare('SELECT name FROM participants WHERE room_id = ? AND voter = ?').bind(id, voter).first() : null;
-          return send(200, { ...(owner ? { participants: snapshot[1].results } : { count: snapshot[1].results[0].count, ...(participant ? { participant } : {}) }), open: !!current.registration_open, joinExpires: current.join_expires, ...(result ? { result } : {}) });
+          const participant = voter ? await db.prepare('SELECT id, name FROM participants WHERE room_id = ? AND voter = ?').bind(id, voter).first() : null;
+          const state = result ? 'drawn' : (current.active_until !== null && current.active_until <= Date.now()) ? 'interrupted' : current.registration_open ? 'open' : 'closed';
+          // Never serialize the full result for a visitor, including an unregistered browser.
+          const personalResult = result && participant ? {
+            won: result.winners.some(winner => winner.id === participant.id), timestamp: result.timestamp,
+          } : undefined;
+          return send(200, { state, expires: current.expires, open: !!current.registration_open, joinExpires: current.join_expires,
+            ...(owner ? { participants: snapshot[1].results, ...(result ? { result } : {}) }
+              : { ...(state === 'open' ? { count: snapshot[1].results[0].count } : {}),
+                  ...(participant ? { participant: { name: participant.name } } : {}), ...(personalResult ? { personalResult } : {}) }) });
         }
         if (!owner) fail('无权管理此活动', 403);
         if (request.method === 'PATCH') {
+          if (interrupted) fail('发起人连接已中断，请清空后创建新活动', 409);
           if (body?.removeParticipantId !== undefined) {
+            if (room.result_winners) fail('开奖后不能移除参与者', 409);
             if (typeof body.removeParticipantId !== 'string' || !body.removeParticipantId) fail('参与者信息无效');
-            await db.prepare('DELETE FROM participants WHERE room_id = ? AND id = ?').bind(id, body.removeParticipantId).run();
-            await db.prepare('UPDATE rooms SET active_until = ? WHERE id = ?').bind(Date.now() + SESSION_LEASE, id).run();
+            await db.prepare(`DELETE FROM participants WHERE room_id = ? AND id = ? AND EXISTS (SELECT 1 FROM rooms WHERE id = participants.room_id AND result_winners IS NULL AND expires > ${SQL_NOW} AND (active_until IS NULL OR active_until > ${SQL_NOW}))`).bind(id, body.removeParticipantId).run();
+            await db.prepare(`UPDATE rooms SET active_until = CASE WHEN result_winners IS NULL THEN ? ELSE NULL END WHERE id = ? AND expires > ${SQL_NOW} AND (result_winners IS NOT NULL OR active_until IS NULL OR active_until > ${SQL_NOW})`).bind(Date.now() + SESSION_LEASE, id).run();
             const participants = await db.prepare('SELECT id, name FROM participants WHERE room_id = ? ORDER BY seq').bind(id).all();
             return send(200, { participants: participants.results, open: registrationOpen });
           }
           if (body?.result !== undefined) {
             const result = drawResult(body.result);
-            const updated = await db.prepare(`UPDATE rooms SET open = 0, result_winners = ?, result_timestamp = ?, active_until = ?
-              WHERE id = ? AND expires >= ${SQL_NOW} AND (active_until IS NULL OR active_until >= ${SQL_NOW}) RETURNING open`)
-              .bind(JSON.stringify(result.winners), result.timestamp, Date.now() + SESSION_LEASE, id).first();
+            const roster = (await db.prepare('SELECT id, name FROM participants WHERE room_id = ?').bind(id).all()).results;
+            const ids = body.result.winners.map(winner => winner.id);
+            if (new Set(ids).size !== ids.length || ids.some(id => !roster.some(p => p.id === id))) fail('中奖者必须来自当前参与名单');
+            result.winners = ids.map(id => roster.find(p => p.id === id));
+            const updated = await db.prepare(`UPDATE rooms SET open = 0, result_winners = ?, result_timestamp = ?, active_until = NULL
+              WHERE id = ? AND expires > ${SQL_NOW} AND (active_until IS NULL OR active_until > ${SQL_NOW})
+              AND (SELECT COUNT(*) FROM participants WHERE room_id = rooms.id AND id IN (SELECT value FROM json_each(?))) = ? RETURNING open`)
+              .bind(JSON.stringify(result.winners), result.timestamp, id, JSON.stringify(ids), ids.length).first();
             if (!updated) fail('邀请已过期或不存在', 404);
             const participants = await db.prepare('SELECT id, name FROM participants WHERE room_id = ? ORDER BY seq').bind(id).all();
             return send(200, { participants: participants.results, open: false, result });
           }
           const snapshot = await db.batch([
-            db.prepare(`UPDATE rooms SET open = (? = 1 AND join_expires > ${SQL_NOW} AND result_winners IS NULL), active_until = ?
-              WHERE id = ? AND expires >= ${SQL_NOW} AND (active_until IS NULL OR active_until >= ${SQL_NOW}) RETURNING open`)
+            db.prepare(`UPDATE rooms SET open = (? = 1 AND join_expires > ${SQL_NOW} AND result_winners IS NULL), active_until = CASE WHEN result_winners IS NULL THEN ? ELSE NULL END
+              WHERE id = ? AND expires > ${SQL_NOW} AND (active_until IS NULL OR active_until > ${SQL_NOW}) RETURNING open`)
               .bind(body?.open === true ? 1 : 0, Date.now() + SESSION_LEASE, id),
             db.prepare('SELECT id, name FROM participants WHERE room_id = ? ORDER BY seq').bind(id),
           ]);

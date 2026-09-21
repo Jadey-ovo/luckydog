@@ -9,8 +9,14 @@ before(async () => {
   // Execute the actual migration, including multi-statement trigger bodies.
   const files = process.env.LUCKYDOG_TEST_SITES
     ? JSON.parse(await readFile('drizzle/meta/_journal.json', 'utf8')).entries.map(entry => `drizzle/${entry.tag}.sql`)
-    : ['migrations/0001_sharing.sql', 'migrations/0002_ephemeral_sessions.sql', 'migrations/0003_room_results.sql'];
+    : ['migrations/0001_sharing.sql', 'migrations/0002_ephemeral_sessions.sql', 'migrations/0003_room_results.sql', 'migrations/0004_activity_history.sql'];
   for (const file of files) {
+    if (file.includes('0004_')) {
+      const now = Date.now();
+      await db.prepare('INSERT INTO rooms (id, owner, join_expires, expires, active_until) VALUES (?, ?, ?, ?, ?)').bind('legacy', 'legacy-owner', now+300000, now+7*86400000, now+90000).run();
+      await db.prepare('INSERT INTO participants (id, room_id, name, voter) VALUES (?, ?, ?, ?)').bind('legacy-person', 'legacy', '迁移演示', 'legacy-voter').run();
+      await db.prepare('UPDATE rooms SET result_winners = ?, result_timestamp = 123 WHERE id = ?').bind(JSON.stringify([{id:'old-random',name:'迁移演示'}]), 'legacy').run();
+    }
     const sql = await readFile(file, 'utf8');
     await db.exec(sql.replace(/--[^\n]*/g, '').replace(/\n/g, ' '));
   }
@@ -28,6 +34,13 @@ const create = async (durationMinutes = 5) => (await api('rooms', 'POST', { dura
 const ownerHeaders = room => ({ Authorization: `Bearer ${room.owner}` });
 const cookie = n => ({ Cookie: `luckydog-voter=${n.toString(16).padStart(48, '0')}` });
 
+test('v5 migration preserves creation deadline and maps historical winner identity', async () => {
+  const row = await db.prepare('SELECT * FROM rooms WHERE id = ?').bind('legacy').first();
+  assert.ok(Math.abs(row.expires - Date.now() - 86400000) < 5000);
+  assert.equal(row.active_until, null);
+  assert.deepEqual(JSON.parse(row.result_winners), [{ id:'legacy-person',name:'迁移演示' }]);
+});
+
 test('room protocol, duration, public privacy, authorization and deletion cascade', async () => {
   for (const duration of [5, 10, 30]) {
     const start = Date.now(), room = await create(duration);
@@ -37,7 +50,7 @@ test('room protocol, duration, public privacy, authorization and deletion cascad
     const joined = await api(`rooms/${room.id}/join`, 'POST', { name: '  春风  ' });
     assert.equal(joined.status, 201);
     assert.match(joined.headers.get('set-cookie'), /HttpOnly; SameSite=Strict; Path=\/; Max-Age=604800; Secure/);
-    assert.deepEqual((await api(`rooms/${room.id}`)).value, { open: true, joinExpires: room.joinExpires, count: 1 });
+    assert.deepEqual((await api(`rooms/${room.id}`)).value, { state: 'open', expires: room.expires, open: true, joinExpires: room.joinExpires, count: 1 });
     const owned = (await api(`rooms/${room.id}`, 'GET', undefined, ownerHeaders(room))).value;
     assert.equal(owned.participants[0].name, '春风'); assert.equal(owned.participants[0].voter, undefined);
     for (const method of ['PATCH', 'DELETE']) assert.equal((await api(`rooms/${room.id}`, method, {}, { Authorization: 'Bearer wrong' })).status, 403);
@@ -95,18 +108,43 @@ test('manual closure and deadlines keep owner access but prohibit new joins and 
   for (const method of ['GET', 'PATCH', 'DELETE']) assert.equal((await api(`rooms/${room.id}`, method, method === 'GET' ? undefined : {}, ownerHeaders(room))).status, 404);
 });
 
-test('one activity link can reopen before its deadline and later show the draw result', async () => {
+test('personal results, latest replacement, fixed retention and safe interruption', async () => {
   const room = await create();
-  await api(`rooms/${room.id}/join`, 'POST', { name: '同一链接用户' });
-  assert.equal((await api(`rooms/${room.id}`, 'PATCH', { open: false }, ownerHeaders(room))).value.open, false);
-  assert.equal((await api(`rooms/${room.id}`, 'PATCH', { open: true }, ownerHeaders(room))).value.open, true);
-  const published = await api(`rooms/${room.id}`, 'PATCH', { result: { winners: [{ id: 'local', name: '同一链接用户' }], timestamp: 456 } }, ownerHeaders(room));
-  assert.equal(published.status, 200); assert.equal(published.value.open, false);
-  const publicRoom = (await api(`rooms/${room.id}`)).value;
-  assert.equal(publicRoom.open, false); assert.equal(publicRoom.result.timestamp, 456);
-  assert.equal(publicRoom.result.winners[0].name, '同一链接用户'); assert.notEqual(publicRoom.result.winners[0].id, 'local');
+  assert.ok(Math.abs(room.expires - Date.now() - 86400000) < 2000);
+  await api(`rooms/${room.id}/join`, 'POST', { name: '甲' }, cookie(81));
+  await api(`rooms/${room.id}/join`, 'POST', { name: '乙' }, cookie(82));
+  const roster = (await api(`rooms/${room.id}`, 'GET', undefined, ownerHeaders(room))).value.participants;
+  for (const [i, timestamp] of [[0, 123], [1, 456], [1, 789]]) {
+    const published = await api(`rooms/${room.id}`, 'PATCH', { result: { winners: [roster[i]], timestamp } }, ownerHeaders(room));
+    assert.equal(published.status, 200);
+    const stranger = (await api(`rooms/${room.id}`)).value;
+    assert.deepEqual(Object.keys(stranger).sort(), ['expires', 'joinExpires', 'open', 'state']);
+    assert.equal(stranger.state, 'drawn');
+    for (const j of [0, 1]) {
+      const self = (await api(`rooms/${room.id}`, 'GET', undefined, cookie(81+j))).value;
+      assert.deepEqual(self.participant, { name: roster[j].name });
+      assert.deepEqual(self.personalResult, { won: i === j, timestamp });
+      assert.equal(self.result, undefined);assert.equal(self.participants, undefined);
+      assert.equal(self.expires, room.expires);
+    }
+  }
+  assert.equal((await api(`rooms/${room.id}`, 'PATCH', { removeParticipantId: roster[0].id }, ownerHeaders(room))).status, 409);
+  assert.equal((await api(`rooms/${room.id}`, 'PATCH', { result: { winners: [{ id: 'fake', name: '甲' }], timestamp: 10 } }, ownerHeaders(room))).status, 400);
   assert.equal((await api(`rooms/${room.id}`, 'PATCH', { open: true }, ownerHeaders(room))).value.open, false);
   assert.equal((await api(`rooms/${room.id}/join`, 'POST', { name: '开奖后来客' })).status, 409);
+  // Completed results do not require heartbeats and retain the original expiry.
+  assert.equal((await db.prepare('SELECT active_until FROM rooms WHERE id = ?').bind(room.id).first()).active_until, null);
+  await db.prepare('UPDATE rooms SET expires = ? WHERE id = ?').bind(Date.now(), room.id).run();
+  assert.equal((await api(`rooms/${room.id}`)).status, 404);
+  const abandoned = await create();
+  await api(`rooms/${abandoned.id}/join`, 'POST', { name: '中断用户' }, cookie(85));
+  await db.prepare('UPDATE rooms SET active_until = 0 WHERE id = ?').bind(abandoned.id).run();
+  const self = (await api(`rooms/${abandoned.id}`, 'GET', undefined, cookie(85))).value;
+  assert.equal(self.state, 'interrupted');assert.equal(self.open, false);assert.equal(self.participant.name, '中断用户');
+  assert.equal((await api(`rooms/${abandoned.id}`, 'GET', undefined, ownerHeaders(abandoned))).value.state, 'interrupted');
+  assert.equal((await api(`rooms/${abandoned.id}`, 'PATCH', {open:true}, ownerHeaders(abandoned))).status, 409);
+  assert.equal((await api(`rooms/${abandoned.id}/join`, 'POST', {name:'迟到'})).status, 409);
+  assert.equal((await api(`rooms/${abandoned.id}`, 'DELETE', {}, ownerHeaders(abandoned))).status, 200);
 });
 
 test('close racing with joins returns a final consistent list', async () => {
@@ -147,15 +185,15 @@ test('result owner can immediately invalidate a shared result', async () => {
   assert.equal((await api(`results/${created.value.id}`)).status, 404);
 });
 
-test('inactive host sessions make invitations and results inaccessible', async () => {
+test('inactive unfinished hosts keep interrupted status while legacy shares expire', async () => {
   const room = await create();
   const created = await api('results', 'POST', { winners: [{ name: '短暂结果' }], timestamp: 123 });
   await db.prepare('UPDATE rooms SET active_until = 0 WHERE id = ?').bind(room.id).run();
   await db.prepare('UPDATE results SET active_until = 0 WHERE id = ?').bind(created.value.id).run();
-  assert.equal((await api(`rooms/${room.id}`)).status, 404);
+  assert.equal((await api(`rooms/${room.id}`)).value.state, 'interrupted');
   assert.equal((await api(`results/${created.value.id}`)).status, 404);
   const worker = await mf.getWorker(); await worker.scheduled({ cron: '0 * * * *' });
-  assert.equal(await db.prepare('SELECT * FROM rooms WHERE id = ?').bind(room.id).first(), null);
+  assert.ok(await db.prepare('SELECT * FROM rooms WHERE id = ?').bind(room.id).first());
   assert.equal(await db.prepare('SELECT * FROM results WHERE id = ?').bind(created.value.id).first(), null);
 });
 
