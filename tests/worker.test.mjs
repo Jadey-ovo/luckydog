@@ -4,12 +4,12 @@ import { readFile } from 'node:fs/promises';
 import { Miniflare } from 'miniflare';
 let mf, db;
 before(async () => {
-  mf = new Miniflare({ modules: true, scriptPath: process.env.LUCKYDOG_TEST_SITES ? 'dist/server/index.js' : 'worker/index.mjs', compatibilityDate: '2026-07-01', d1Databases: { DB: 'test-db' } });
+  mf = new Miniflare({ modules: true, scriptPath: process.env.LUCKYDOG_TEST_SITES === 'source' ? 'worker/sites.mjs' : process.env.LUCKYDOG_TEST_SITES ? 'dist/server/index.js' : 'worker/index.mjs', compatibilityDate: '2026-07-01', d1Databases: { DB: 'test-db' } });
   db = await mf.getD1Database('DB');
   // Execute the actual migration, including multi-statement trigger bodies.
   const files = process.env.LUCKYDOG_TEST_SITES
     ? JSON.parse(await readFile('drizzle/meta/_journal.json', 'utf8')).entries.map(entry => `drizzle/${entry.tag}.sql`)
-    : ['migrations/0001_sharing.sql', 'migrations/0002_ephemeral_sessions.sql', 'migrations/0003_room_results.sql', 'migrations/0004_activity_history.sql'];
+    : ['migrations/0001_sharing.sql', 'migrations/0002_ephemeral_sessions.sql', 'migrations/0003_room_results.sql', 'migrations/0004_activity_history.sql', 'migrations/0005_round_history.sql'];
   for (const file of files) {
     if (file.includes('0004_')) {
       const now = Date.now();
@@ -39,9 +39,11 @@ test('v5 migration preserves creation deadline and maps historical winner identi
   assert.ok(Math.abs(row.expires - Date.now() - 86400000) < 5000);
   assert.equal(row.active_until, null);
   assert.deepEqual(JSON.parse(row.result_winners), [{ id:'legacy-person',name:'迁移演示' }]);
+  const history = await db.prepare('SELECT timestamp, winners FROM room_draws WHERE room_id = ?').bind('legacy').all();
+  assert.deepEqual(history.results, [{ timestamp:123, winners:row.result_winners }]);
 });
 
-test('room protocol, duration, public privacy, authorization and deletion cascade', async () => {
+test('room protocol, duration, public privacy, authorization and archive retention', async () => {
   for (const duration of [5, 10, 30]) {
     const start = Date.now(), room = await create(duration);
     assert.match(room.id, /^[a-f0-9]{48}$/); assert.match(room.owner, /^[a-f0-9]{48}$/);
@@ -55,8 +57,10 @@ test('room protocol, duration, public privacy, authorization and deletion cascad
     assert.equal(owned.participants[0].name, '春风'); assert.equal(owned.participants[0].voter, undefined);
     for (const method of ['PATCH', 'DELETE']) assert.equal((await api(`rooms/${room.id}`, method, {}, { Authorization: 'Bearer wrong' })).status, 403);
     assert.equal((await api(`rooms/${room.id}`, 'DELETE', {}, ownerHeaders(room))).status, 200);
-    assert.equal((await api(`rooms/${room.id}`)).status, 404);
-    assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM participants WHERE room_id = ?').bind(room.id).first()).n, 0);
+    assert.equal((await api(`rooms/${room.id}`)).value.state, 'ended');
+    assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM participants WHERE room_id = ?').bind(room.id).first()).n, 1);
+    assert.equal((await api(`rooms/${room.id}/join`, 'POST', {name:'结束后来客'})).status, 409);
+    assert.equal((await api(`rooms/${room.id}`, 'PATCH', {open:true}, ownerHeaders(room))).status, 409);
   }
   assert.equal((await api('rooms', 'POST', { durationMinutes: 1 })).status, 400);
   const start = Date.now(), room = (await api('rooms', 'POST', {})).value;
@@ -114,7 +118,7 @@ test('personal results, latest replacement, fixed retention and safe interruptio
   await api(`rooms/${room.id}/join`, 'POST', { name: '甲' }, cookie(81));
   await api(`rooms/${room.id}/join`, 'POST', { name: '乙' }, cookie(82));
   const roster = (await api(`rooms/${room.id}`, 'GET', undefined, ownerHeaders(room))).value.participants;
-  for (const [i, timestamp] of [[0, 123], [1, 456], [1, 789]]) {
+  for (const [i, timestamp, round] of [[0, 123, 1], [1, 456, 2], [1, 789, 3]]) {
     const published = await api(`rooms/${room.id}`, 'PATCH', { result: { winners: [roster[i]], timestamp } }, ownerHeaders(room));
     assert.equal(published.status, 200);
     const stranger = (await api(`rooms/${room.id}`)).value;
@@ -123,7 +127,8 @@ test('personal results, latest replacement, fixed retention and safe interruptio
     for (const j of [0, 1]) {
       const self = (await api(`rooms/${room.id}`, 'GET', undefined, cookie(81+j))).value;
       assert.deepEqual(self.participant, { name: roster[j].name });
-      assert.deepEqual(self.personalResult, { won: i === j, timestamp });
+      assert.deepEqual(self.personalResult, { won: i === j, timestamp, round });
+      assert.equal(self.history.length, round);
       assert.equal(self.result, undefined);assert.equal(self.participants, undefined);
       assert.equal(self.expires, room.expires);
     }
@@ -219,6 +224,36 @@ test('participant capacity is enforced atomically under concurrency', async () =
   assert.equal(replies.filter(r => r.status === 201).length, 1);
   assert.equal(replies.filter(r => r.status === 400 && r.value.error === '参与人数已满').length, 7);
   assert.equal((await api(`rooms/${room.id}`)).value.count, 5000);
+});
+
+test('round retries are idempotent; archive preserves private history until expiry and cleanup', async () => {
+  const room = await create();
+  for (const [n, name] of [[701, '历史甲'], [702, '历史乙']]) await api(`rooms/${room.id}/join`, 'POST', {name}, cookie(n));
+  const roster = (await api(`rooms/${room.id}`, 'GET', undefined, ownerHeaders(room))).value.participants;
+  const first = {result:{winners:[roster[0]],timestamp:1000}};
+  const second = {result:{winners:[roster[1]],timestamp:2000}};
+  const retries = await Promise.all(Array.from({length:8},()=>api(`rooms/${room.id}`, 'PATCH', first, ownerHeaders(room))));
+  assert.ok(retries.every(r=>r.status===200));
+  assert.equal((await api(`rooms/${room.id}`, 'PATCH', second, ownerHeaders(room))).status,200);
+  assert.equal((await api(`rooms/${room.id}`, 'PATCH', first, ownerHeaders(room))).status,200);
+  const expected=[{round:1,timestamp:1000,won:true},{round:2,timestamp:2000,won:false}];
+  const read=async()=>(await api(`rooms/${room.id}`,'GET',undefined,cookie(701))).value;
+  assert.deepEqual((await read()).history,expected);
+  assert.equal((await read()).personalResult.timestamp,2000);
+  assert.equal((await api(`rooms/${room.id}`,'PATCH',{archive:true})).status,403);
+  assert.equal((await api(`rooms/${room.id}`,'PATCH',{archive:true},ownerHeaders(room))).status,200);
+  assert.deepEqual((await read()).history,expected);
+  assert.equal((await read()).expires,room.expires);
+  assert.equal((await api(`rooms/${room.id}`,'PATCH',second,ownerHeaders(room))).status,409);
+  assert.equal((await api(`rooms/${room.id}`,'DELETE',{},ownerHeaders(room))).status,200);
+  const stranger=(await api(`rooms/${room.id}`)).value;
+  assert.deepEqual(Object.keys(stranger).sort(),['expires','joinExpires','open','state']);
+  assert.deepEqual((await read()).history,expected);
+  const next=await create();assert.notEqual(next.id,room.id);
+  await db.prepare('UPDATE rooms SET expires = 0 WHERE id = ?').bind(room.id).run();
+  assert.equal((await api(`rooms/${room.id}`)).status,404);
+  const worker=await mf.getWorker();await worker.scheduled({cron:'0 * * * *'});
+  for(const table of ['participants','room_draws']) assert.equal((await db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE room_id = ?`).bind(room.id).first()).n,0);
 });
 
 test('room and result caps remain atomic and expired rows do not consume quota', async () => {

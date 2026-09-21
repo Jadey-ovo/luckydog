@@ -5,6 +5,7 @@ export const rooms = sqliteTable('rooms', {
   id: text('id').primaryKey(),
   owner: text('owner').notNull(),
   open: integer('open').notNull().default(1),
+  archived: integer('archived').notNull().default(0),
   joinExpires: integer('join_expires').notNull(),
   expires: integer('expires').notNull(),
   activeUntil: integer('active_until'),
@@ -26,3 +27,10 @@ export const results = sqliteTable('results', {
   expires: integer('expires').notNull(),
   activeUntil: integer('active_until'),
 }, table => [index('results_expiry').on(table.expires)]);
+
+export const roomDraws = sqliteTable('room_draws', {
+  seq: integer('seq').primaryKey({ autoIncrement: true }),
+  roomId: text('room_id').notNull().references(() => rooms.id, { onDelete: 'cascade' }),
+  timestamp: real('timestamp').notNull(),
+  winners: text('winners').notNull(),
+}, table => [uniqueIndex('room_draws_timestamp').on(table.roomId, table.timestamp)]);

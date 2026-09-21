@@ -1,11 +1,20 @@
 import React, { useEffect, useState } from 'react';
-import { Clock3, UserRound } from 'lucide-react';
+import { Check, Clock3, Trophy, Sparkles, CircleSlash, WifiOff, LoaderCircle } from 'lucide-react';
 import { api, ApiError } from '../services/sharing';
 import type { DrawResult } from '../types';
-import { ProductManual } from './ProductManual';
 
-type RoomView = { open:boolean; joinExpires:number; expires:number; state:'open'|'closed'|'drawn'|'interrupted'; participant?:{name:string}; personalResult?:{won:boolean;timestamp:number} };
+type PersonalRound = { round:number; won:boolean; timestamp:number };
+type RoomView = {
+ open:boolean; joinExpires:number; expires:number;
+ state:'open'|'closed'|'drawn'|'interrupted'|'ended';
+ participant?:{name:string}; personalResult?:PersonalRound; history?:PersonalRound[];
+};
 const countdown=(milliseconds:number)=>{const seconds=Math.max(0,Math.ceil(milliseconds/1000));return `${String(Math.floor(seconds/60)).padStart(2,'0')}:${String(seconds%60).padStart(2,'0')}`;};
+const time=(timestamp:number)=>new Date(timestamp).toLocaleString('zh-CN');
+
+function GuestIdentity({name}:{name:string}) {
+ return <div className="guest-identity"><span className="guest-avatar" aria-hidden="true">{Array.from(name.trim())[0]}</span><div><span className="guest-identity-label">报名用户名</span><strong>{name}</strong></div><Check size={16} aria-label="已报名"/></div>;
+}
 
 export function SharedPage({kind,id}:{kind:string;id:string}) {
  const [name,setName]=useState('');
@@ -18,52 +27,67 @@ export function SharedPage({kind,id}:{kind:string;id:string}) {
  const [now,setNow]=useState(Date.now());
  const [retry,setRetry]=useState(0);
  useEffect(()=>{
-  let active=true;let timer:ReturnType<typeof setTimeout>;
+  let active=true;let terminal=false;let timer:ReturnType<typeof setTimeout>;
   const load=async()=>{
    try {
     const data=await api<RoomView|DrawResult>(`${kind==='join'?'rooms':'results'}/${encodeURIComponent(id)}`);
     if(!active)return;
     setUnavailable(false);setError('');setNow(Date.now());
-    if(kind==='join')setRoom(data as RoomView);else setResult(data as DrawResult);
+    if(kind==='join'){const activity=data as RoomView;setRoom(activity);terminal=Date.now()>=activity.expires;}else setResult(data as DrawResult);
    }catch(caught){
     if(!active)return;
     const gone=caught instanceof ApiError&&caught.status===404;
-    setUnavailable(gone);setError(gone?'链接已过期或已被发起人清空。':'暂时无法读取活动，请检查网络后重试。');
-    // Do not present cached results as current after a failed request.
+    terminal=gone;setUnavailable(gone);setError(gone?'活动链接已失效。':'暂时无法读取活动，请检查网络后重试。');
+    // Failed requests must not present cached results as the current activity state.
     setRoom(null);setResult(null);
    }finally{
-    if(active){setLoading(false);if(kind==='join')timer=setTimeout(load,2500);}
+    if(active){setLoading(false);if(kind==='join'&&!terminal)timer=setTimeout(load,2500);}
    }
   };
   void load();return()=>{active=false;clearTimeout(timer);};
  },[id,kind,retry]);
  useEffect(()=>{const timer=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(timer);},[]);
- const expired=room&&now>=room.expires;
- const registrationOpen=room?.open&&now<room.joinExpires;
+ const expired=Boolean(room&&now>=room.expires);
+ const registrationOpen=room?.state==='open'&&room.open&&now<room.joinExpires;
  const self=room?.participant;
- const validity=room?<p className="field-hint">查询有效至 {new Date(room.expires).toLocaleString('zh-CN')}。请使用报名时的浏览器查询本人结果；清空 Cookie 或更换设备无法识别本人。</p>:null;
  let content:React.ReactNode;
  if(loading){
-  content=<section className="join-card" aria-busy="true"><h1>正在加载活动…</h1><p role="status">请稍候，正在查询活动状态</p></section>;
+  content=<section className="guest-card" aria-busy="true"><div className="guest-state-icon loading"><LoaderCircle/></div><h1>正在加载活动…</h1><p className="guest-description" role="status">请稍候，正在查询活动状态</p></section>;
  }else if(unavailable||expired){
-  content=<section className="join-card join-closed expired-activity"><h1>该活动已失效</h1><p>活动创建已满 24 小时，或已被发起人清空。</p><a href="./">返回 Luckydog</a></section>;
+  content=<section className="guest-card"><div className="guest-state-icon muted"><CircleSlash/></div><h1>活动已失效</h1><p className="guest-description">活动查询已结束，相关记录已不可访问。</p></section>;
  }else if(error&&!room&&!result){
-  content=<section className="join-card"><h1>暂时无法读取活动</h1><p role="alert">{error}</p><button className="import-button" onClick={()=>{setLoading(true);setRetry(value=>value+1);}}>重试</button></section>;
+  content=<section className="guest-card"><div className="guest-state-icon muted"><WifiOff/></div><h1>暂时无法读取活动</h1><p className="guest-description" role="alert">{error}</p><button className="import-button" onClick={()=>{setLoading(true);setRetry(value=>value+1);}}>重试</button></section>;
  }else if(room?.state==='drawn'){
-  content=<section className="join-card join-closed"><span className="eyebrow">LUCKYDOG RESULT</span><h1>{self?(room.personalResult?.won?'恭喜你中奖啦':'本次未中奖'):'活动已结束'}</h1>{self&&<><div className="registered-user"><UserRound size={18}/><span>你的报名用户名</span><strong>{self.name}</strong></div><p>{room.personalResult?.won?'好运属于你，祝你拥有愉快的一天！':'谢谢你的参与，愿下一份好运属于你。'}</p><p className="field-hint">最新开奖时间 {new Date(room.personalResult!.timestamp).toLocaleString('zh-CN')} · 继续抽奖后会更新为最新结果</p></>}{validity}</section>;
+  const latest=room.personalResult;
+  const won=Boolean(latest?.won);
+  content=<section className={`guest-card ${self&&won?'guest-winner':''}`}>
+   <div className={`guest-state-icon ${self&&won?'gold':'muted'}`}>{self&&won?<Trophy/>:<Sparkles/>}</div>
+   {self&&latest&&<span className="guest-round">第 {latest.round} 轮 · 最新结果</span>}
+   <h1>{self?(won?'恭喜你中奖啦':'本轮未中奖'):'活动已结束'}</h1>
+   {self?<><p className="guest-description">{won?'这一刻，好运属于你。':'感谢参与，期待下一份好运。'}</p><GuestIdentity name={self.name}/>
+    {latest&&<p className="guest-caption">开奖于 {time(latest.timestamp)}</p>}
+    {Boolean(room.history?.length)&&<section className="guest-history" aria-label="我的抽奖记录"><div className="guest-history-heading"><h2>我的抽奖记录</h2><span>{room.history!.length} 轮</span></div><ol>{[...room.history!].reverse().map(draw=><li key={draw.round}><div><strong>第 {draw.round} 轮</strong><time dateTime={new Date(draw.timestamp).toISOString()}>{time(draw.timestamp)}</time></div><span className={`guest-outcome ${draw.won?'won':''}`}>{draw.won?'中奖':'未中奖'}</span></li>)}</ol></section>}
+   </>:<p className="guest-description">本次活动已完成开奖。</p>}
+  </section>;
  }else if(room){
   const interrupted=room.state==='interrupted';
+  const ended=room.state==='ended';
   const closed=!registrationOpen;
-  content=<section className={`join-card ${closed?'join-closed':''}`}>
-   <span className="eyebrow">A LITTLE MOMENT OF LUCK</span>
-   <h1>{interrupted?'活动已中断':closed?'报名已截止':self?'报名成功':'加入这场好运'}</h1>
-   {registrationOpen&&<div className="guest-countdown" role="timer"><Clock3 size={17}/><span>报名截止倒计时</span><strong>{countdown(room.joinExpires-now)}</strong></div>}
-   {closed?<div className="closed-message waiting-result">{self&&<div className="registered-user"><UserRound size={18}/><span>你的报名用户名</span><strong>{self.name}</strong></div>}<p>{interrupted?'发起人连接已中断，本次活动未完成开奖，请联系发起人。':'报名已截止，请等待发起人公布抽奖结果。本页面会自动更新。'}</p></div>:self?<p>你的用户名是 {self.name}，本页会在开奖后自动显示本人结果。</p>:<form onSubmit={async event=>{event.preventDefault();setBusy(true);setError('');try{await api(`rooms/${encodeURIComponent(id)}/join`,'POST',{name});setRoom(current=>current?{...current,participant:{name:name.trim()}}:current);}catch(caught){setError((caught as Error).message);}finally{setBusy(false);}}}><p>填写用户名，给自己一份好运。</p><input aria-label="用户名" placeholder="你的用户名" required maxLength={80} value={name} onChange={event=>setName(event.target.value)} disabled={busy}/><button className="import-button" disabled={busy||!name.trim()}>{busy?'正在提交…':'确认参与'}</button></form>}
-   {registrationOpen&&<ol className="join-notes"><li>请填写用于抽奖的用户名。</li><li>提交成功后等待发起人开奖。</li><li>原二维码和链接会在开奖后显示本人结果。</li></ol>}
-   {error&&<p role="alert" className="inline-error">{error}</p>}{validity}
+  const title=ended?'活动已结束':interrupted?'活动已中断':closed?'报名已截止':self?'报名成功':'加入这场好运';
+  content=<section className="guest-card">
+   <div className={`guest-state-icon ${ended||interrupted?'muted':self?'success':''}`}>{ended||interrupted?<CircleSlash/>:self?<Check/>:<Clock3/>}</div>
+   <h1>{title}</h1>
+   {self&&<GuestIdentity name={self.name}/>}
+   {ended?<p className="guest-description">本次活动已结束，未进行开奖。</p>:interrupted?<p className="guest-description">本次活动未完成开奖，请联系发起人。</p>:closed?<p className="guest-description">{self?'请等待发起人公布抽奖结果。':'本次报名已截止，暂未开奖。'}</p>:self?<p className="guest-caption">本页会在开奖后自动显示本人结果。</p>:<>
+    <p className="guest-description">填写用户名，给自己一份好运。</p>
+    <div className="guest-countdown" role="timer"><Clock3 size={16}/><span>报名截止倒计时</span><strong>{countdown(room.joinExpires-now)}</strong></div>
+    <form onSubmit={async event=>{event.preventDefault();setBusy(true);setError('');try{await api(`rooms/${encodeURIComponent(id)}/join`,'POST',{name});setRoom(current=>current?{...current,participant:{name:name.trim()}}:current);}catch(caught){setError((caught as Error).message);}finally{setBusy(false);}}}><label htmlFor="guest-name">用户名</label><input id="guest-name" placeholder="你希望被叫到的名字" autoComplete="nickname" required maxLength={80} value={name} onChange={event=>setName(event.target.value)} disabled={busy}/><button className="import-button" disabled={busy||!name.trim()}>{busy?'正在提交…':'确认参与'}</button></form>
+    <ol className="join-notes"><li>请填写用于抽奖的用户名。</li><li>提交成功后等待发起人开奖。</li><li>原二维码和链接会在开奖后显示本人结果。</li></ol>
+   </>}
+   {error&&<p role="alert" className="inline-error">{error}</p>}
   </section>;
  }else if(result){
-  content=<section className="shared-results"><div className="result-heading"><h1>幸运名单</h1></div><div className="winner-grid">{result.winners.map(p=><article className="winner-card" key={p.id}><strong>{p.name}</strong></article>)}</div><p>由发起人主动分享 · 发起页面关闭后失效</p></section>;
+  content=<section className="guest-card"><h1>幸运名单</h1><div className="winner-grid">{result.winners.map(p=><article className="winner-card" key={p.id}><strong>{p.name}</strong></article>)}</div><p className="guest-caption">由发起人主动分享</p></section>;
  }
- return <main className="shared-page"><header className="shared-topbar"><a className="shared-brand" href="./">Luckydog</a><ProductManual/></header>{content}</main>;
+ return <main className="participant-page"><header className="guest-topbar"><span className="shared-brand">Luckydog</span><span>活动参与</span></header><div className="guest-content">{content}</div>{room&&!expired&&!unavailable&&<footer className="guest-footer">查询有效至 <time dateTime={new Date(room.expires).toISOString()}>{time(room.expires)}</time></footer>}</main>;
 }

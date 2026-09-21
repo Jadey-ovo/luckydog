@@ -398,3 +398,70 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
  .roster-heading-actions { flex-wrap:wrap; justify-content:flex-end; }
  .party-poppers svg { width:42px; height:42px; bottom:4%; }
 }
+
+/* Participant pages share one identity layout; only the activity-specific content changes. */
+.participant-page { min-height:100svh; display:flex; flex-direction:column; padding:24px clamp(16px,4vw,40px) 20px; background:radial-gradient(ellipse at 50% 0,#fffaf2,transparent 65%),#f1ebe1; }
+.guest-topbar { width:100%; max-width:680px; margin:0 auto 32px; display:flex; align-items:center; justify-content:space-between; gap:16px; }
+.guest-topbar .shared-brand { margin:0; font-size:25px; }
+.guest-topbar > span:last-child { font:11px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; color:#8c7c67; letter-spacing:.12em; }
+.guest-content { width:100%; max-width:480px; margin:0 auto 32px; }
+.guest-card { padding:36px 28px 28px; text-align:center; border:1px solid #dfcfb8; border-radius:26px; background:#fffcf7; box-shadow:0 16px 48px #6850370a; }
+.guest-card h1 { margin:14px 0 16px; font-size:clamp(26px,5vw,34px); line-height:1.35; font-weight:700; color:#382e23; }
+.guest-state-icon { display:grid; place-items:center; width:58px; height:58px; margin:0 auto; border-radius:20px; background:#f2e5d2; color:#936537; }
+.guest-state-icon svg { width:27px; height:27px; stroke-width:1.6; }
+.guest-state-icon.success { background:#e9efe4; color:#657e52; }
+.guest-state-icon.muted { background:#eee9e1; color:#9b8b77; }
+.guest-state-icon.gold { width:76px; height:76px; border-radius:50%; background:linear-gradient(145deg,#f4dfaf,#e8c989); color:#8b5f27; box-shadow:0 0 0 7px #f9f0df; }
+.guest-state-icon.gold svg { width:36px; height:36px; }
+.guest-state-icon.loading svg { animation:guest-spin 1.4s linear infinite; }
+@keyframes guest-spin { to { transform:rotate(360deg); } }
+.guest-description { margin:0 0 22px; color:#8a775f; font-size:14px; line-height:1.9; overflow-wrap:anywhere; }
+.guest-caption { margin:18px 0 0; color:#9a8974; font-size:12px; line-height:1.8; }
+.guest-identity { display:grid; grid-template-columns:48px minmax(0,1fr) 16px; gap:14px; align-items:center; padding:20px; margin:24px 0 0; text-align:left; border:1px solid #eadfce; border-radius:16px; background:#f7f2e9; }
+.guest-avatar { display:grid; place-items:center; width:48px; height:48px; border-radius:16px; background:#e8dac5; color:#91683c; font-size:23px; font-weight:700; }
+.guest-identity-label { display:block; margin-bottom:6px; color:#9a886f; font:11px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+.guest-identity strong { display:block; font-size:23px; line-height:1.4; color:#493828; overflow-wrap:anywhere; }
+.guest-identity > svg { color:#869473; }
+.guest-card form { display:flex; flex-direction:column; gap:12px; text-align:left; }
+.guest-card form label { font-size:12px; color:#79644b; }
+.guest-card input { width:100%; min-width:0; min-height:48px; padding:12px 14px; border:1px solid #d9c7ac; border-radius:12px; background:#fffefa; color:#483729; font-size:16px; }
+.guest-card .import-button { width:100%; min-height:46px; }
+.guest-card .join-notes { text-align:left; margin-top:24px; padding-top:18px; border-top:1px solid #eee3d4; }
+.guest-round { display:block; margin:24px 0 0; color:#a07945; font-size:11px; letter-spacing:.06em; }
+.guest-winner { background:radial-gradient(ellipse at 50% 0,#fff3d8,transparent 55%),#fffcf7; }
+.guest-history { margin-top:28px; padding-top:22px; border-top:1px solid #e9dfcf; text-align:left; }
+.guest-history-heading { display:flex; justify-content:space-between; gap:12px; align-items:center; margin-bottom:14px; }
+.guest-history h2 { margin:0; font-size:14px; font-weight:700; color:#62513e; }
+.guest-history-heading > span { color:#a29078; font-size:11px; }
+.guest-history ol { list-style:none; margin:0; padding:0; }
+.guest-history li { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:13px 0; border-bottom:1px solid #f0e8dd; }
+.guest-history li:last-child { border-bottom:0; padding-bottom:0; }
+.guest-history li strong { display:block; font-size:13px; color:#79634b; }
+.guest-history time { display:block; margin-top:5px; color:#a1907c; font:10px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+.guest-outcome { flex:none; border-radius:999px; padding:5px 10px; color:#958775; background:#f1ede6; font-size:11px; }
+.guest-outcome.won { color:#95652d; background:#f4e8ce; }
+.guest-footer { margin-top:auto; padding-top:12px; text-align:center; color:#a1917d; font:11px/1.8 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+.restart-invite { flex:none; margin-top:12px; width:100%; }
+.privacy-summary { flex:1; }
+.privacy-banner > svg { flex:none; }
+.privacy-banner > a { flex:none; }
+@media(prefers-reduced-motion:reduce) { .guest-state-icon.loading svg { animation:none; } }
+@media(max-width:480px) {
+ .participant-page { padding:20px 16px 18px; }
+ .guest-topbar { margin-bottom:28px; }
+ .guest-card { padding:30px 22px 24px; border-radius:22px; }
+ .guest-identity { padding:16px; gap:12px; grid-template-columns:42px minmax(0,1fr) 16px; }
+ .guest-avatar { width:42px; height:42px; border-radius:14px; font-size:21px; }
+ .guest-identity strong { font-size:21px; }
+ .privacy-banner { flex-wrap:wrap; justify-content:flex-start; gap:6px 10px; }
+ .privacy-summary { flex-basis:calc(100% - 40px); }
+ .brand small { font-size:9px; letter-spacing:0; }
+}
+/* Short desktop windows must scroll rather than clip invitation and draw controls. */
+@media(min-width:901px) and (max-height:760px) {
+ .app-shell { height:auto; min-height:100vh; overflow:visible; }
+ .workspace { min-height:650px; flex:none; }
+}
+@media(max-width:600px) {
+ .privacy-info [role=tooltip] { position:fixed; top:110px; left:16px; width:calc(100vw - 32px); max-height:calc(100svh - 140px); overflow:auto; }
+}

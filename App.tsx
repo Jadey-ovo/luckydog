@@ -60,7 +60,7 @@ const App: React.FC = () => {
   }, [currentResult, activeRoom?.id, activeRoom?.owner, isDesktop, syncRetry]);
 
   const helperText = useMemo(() => {
-    if (!ready) return '先确认参与名单，再设置本轮中奖名额。';
+    if (!ready) return '把好运留给这一刻';
     if (winnerCount === 1) return `${participants.length} 位朋友已经就位，今天的幸运儿会是谁？`;
     return `${participants.length} 位朋友都在场，准备迎接 ${winnerCount} 份好运。`;
   }, [participants.length, winnerCount, ready]);
@@ -78,9 +78,9 @@ const App: React.FC = () => {
   const clearActivity = async () => {
     setSharing(true); setShareError('');
     try {
-      if (activeRoom) { try { await api(`rooms/${activeRoom.id}`, 'DELETE', {}, activeRoom.owner); } catch (error) { if (!(error instanceof ApiError && error.status === 404)) throw error; } }
+      if (activeRoom) { try { await api(`rooms/${activeRoom.id}`, 'PATCH', {archive:true}, activeRoom.owner); } catch (error) { if (!(error instanceof ApiError && error.status === 404)) throw error; } }
       if (resultShare) await api(`results/${resultShare.id}`, 'DELETE', {}, resultShare.owner);
-      setResultShare(null); setResultUrl(''); setActiveRoom(null); setSyncedResult(0); setParticipants([]); setReady(false);
+      setResultShare(null); setResultUrl(''); setActiveRoom(null); setSyncedResult(0); setWinnerCount(1); setParticipants([]); setReady(false);
       setShareOpen(false); setResultAction(null); setParticipantFlowKey(value => value + 1); resetDraw();
     } catch (error) { setShareError((error as Error).message); }
     finally { setSharing(false); }
@@ -98,7 +98,7 @@ const App: React.FC = () => {
       <header className="topbar">
         <div className="brand">
           <span className="brand-mark"><Trophy size={19} /></span>
-          <div><strong>Luckydog</strong><small>把好运留给这一刻</small></div>
+          <div><strong>Luckydog</strong><small>扫码报名，轻松抽奖的活动助手</small></div>
         </div>
         <div className="topbar-actions">
           <ProductManual />
@@ -109,8 +109,8 @@ const App: React.FC = () => {
       {!isDesktop && privacyVisible && (
         <div className="privacy-banner" role="status">
           <ShieldCheck size={16} />
-          <span className="privacy-summary">活动创建后 24 小时内可查询本人结果。
-            <span className="info-bubble privacy-info"><button aria-label="查看信息安全说明" aria-describedby="privacy-details"><Info size={15}/></button><span id="privacy-details" role="tooltip">报名与开奖结果保存在 Sites 托管服务，创建满 24 小时后失效并自动清理。关闭页面不删除已开奖结果；未开奖且连接中断约 90 秒后停止报名。清空活动会立即撤销链接。</span></span>
+          <span className="privacy-summary">个人信息仅用于活动报名与抽奖，参与者仅可查询本人记录。
+            <span className="info-bubble privacy-info"><button aria-label="查看信息安全说明" aria-describedby="privacy-details"><Info size={15}/></button><span id="privacy-details" role="tooltip">数据保护说明：报名用户名、匿名浏览器标识和抽奖记录由 Sites 托管服务处理。完整名单仅向持管理凭据的发起人开放，参与者只能查询本人记录。活动创建满 24 小时后停止访问，过期数据由服务自动清理。不使用广告或行为分析 SDK；平台日志与备份保留规则详见隐私说明。</span></span>
           </span>
           <a href="./privacy.html" target="_blank" rel="noopener noreferrer">隐私说明</a>
           <a href="https://github.com/Jadey-ovo/luckydog/releases/latest" target="_blank" rel="noopener noreferrer">下载桌面版</a>
@@ -124,10 +124,10 @@ const App: React.FC = () => {
         <aside className="control-panel" aria-label="抽奖配置">
           <div className="panel-heading">
             <div><span className="eyebrow">DRAW SETUP</span><h2 className="config-title">抽奖配置<span className="info-bubble"><button aria-label="抽奖规则" aria-describedby="draw-rules"><Info size={15}/></button><span id="draw-rules" role="tooltip">同一轮不会重复中奖。返回后再次抽奖，将从完整名单重新抽取。</span></span></h2></div>
-            <span className="ready-dot">{canDraw ? '已就绪' : '待配置'}</span>
+
           </div>
 
-          <ParticipantSetup key={participantFlowKey} participants={participants} setParticipants={setParticipants} locked={drawing||Boolean(activeRoom&&(syncedResult||currentResult))} onReady={setReady} onReset={resetDraw} onRoomChange={setActiveRoom} isDesktop={isDesktop}>
+          <ParticipantSetup key={participantFlowKey} participants={participants} setParticipants={setParticipants} locked={drawing||Boolean(activeRoom&&(syncedResult||currentResult))} onReady={setReady} onReset={resetDraw} onRoomChange={setActiveRoom} onRestart={()=>setResultAction('clear')} resetting={sharing} isDesktop={isDesktop}>
           <section className="setting-block">
             <div className="setting-label"><span>中奖名额</span><small>不超过参与人数</small></div>
             <div className="count-stepper">
@@ -191,11 +191,10 @@ const App: React.FC = () => {
           )}
         </section>
       </main>
-      {activeRoom && status !== DrawStatus.FINISHED && <button className="back-button" disabled={drawing||sharing} onClick={()=>setResultAction('clear')}>清空本次活动</button>}
       {activeRoom && currentResult && syncedResult!==currentResult.timestamp && <p role="status">{sharing?'正在同步本人开奖结果…':<>开奖结果尚未同步，参与者暂时无法查询本轮结果。<button onClick={()=>{publishedRoomResult.current=0;setSyncRetry(value=>value+1);}}>重试同步开奖结果</button></>}</p>}
       <Toast message={shareError} onClose={()=>setShareError('')}/>
-      {resultAction==='continue'&&<div className="modal-backdrop"><div className="dialog" role="dialog" aria-modal="true" aria-labelledby="continue-draw-title"><button className="dialog-close" aria-label="关闭弹窗" onClick={()=>setResultAction(null)}><X size={18}/></button><h2 id="continue-draw-title">继续使用当前名单抽奖</h2><p>当前参与名单会完整保留。下一轮会从整个名单重新随机抽取，因此可能与上一轮的中奖者重复；活动链接会继续显示最近一次完成的结果。</p><div className="dialog-actions"><button onClick={()=>setResultAction(null)}>取消</button><button autoFocus className="primary" onClick={continueDraw}>确认继续抽奖</button></div></div></div>}
-      {resultAction==='clear'&&<div className="modal-backdrop"><div className="dialog danger-dialog" role="dialog" aria-modal="true" aria-labelledby="clear-activity-title"><button className="dialog-close" aria-label="关闭弹窗" disabled={sharing} onClick={()=>setResultAction(null)}><X size={18}/></button><h2 id="clear-activity-title">清空本次活动</h2><p>确认后会删除本次参与名单和开奖结果，原邀请二维码、邀请链接及参与者正在查看的结果页都会失效，并返回到新的邀请报名起点。此操作无法撤销。</p><div className="dialog-actions"><button disabled={sharing} onClick={()=>setResultAction(null)}>保留本次活动</button><button autoFocus className="danger" disabled={sharing} onClick={()=>void clearActivity()}>{sharing?'正在清空…':'确认清空并返回'}</button></div></div></div>}
+      {resultAction==='continue'&&<div className="modal-backdrop"><div className="dialog" role="dialog" aria-modal="true" aria-labelledby="continue-draw-title"><button className="dialog-close" aria-label="关闭弹窗" onClick={()=>setResultAction(null)}><X size={18}/></button><h2 id="continue-draw-title">继续使用当前名单抽奖</h2><p>当前参与名单会完整保留。下一轮会从整个名单重新随机抽取，因此可能与上一轮的中奖者重复；活动链接会展示最新结果，并保留每轮本人的抽奖记录。</p><div className="dialog-actions"><button onClick={()=>setResultAction(null)}>取消</button><button autoFocus className="primary" onClick={continueDraw}>确认继续抽奖</button></div></div></div>}
+      {resultAction==='clear'&&<div className="modal-backdrop"><div className="dialog danger-dialog" role="dialog" aria-modal="true" aria-labelledby="clear-activity-title"><button className="dialog-close" aria-label="关闭弹窗" disabled={sharing} onClick={()=>setResultAction(null)}><X size={18}/></button><h2 id="clear-activity-title">返回重新发起</h2><p>{isDesktop?'确认后清空本机名单与当前配置，返回新的抽奖起点。此操作无法撤销。':'确认后结束当前活动并清空本页配置。历史报名与每轮抽奖记录不会删除，原链接和二维码仍可查询至创建后 24 小时。重新发起将生成新的链接和二维码，无法恢复本次活动的管理。'}</p><div className="dialog-actions"><button disabled={sharing} onClick={()=>setResultAction(null)}>保留本次活动</button><button autoFocus className="danger" disabled={sharing} onClick={()=>void clearActivity()}>{sharing?'正在清空…':'确认清空并返回'}</button></div></div></div>}
       {shareOpen && <div className="modal-backdrop"><div className="dialog" role="dialog" aria-modal="true" aria-labelledby="share-title"><button className="dialog-close" aria-label="关闭弹窗" disabled={sharing} onClick={()=>setShareOpen(false)}><X size={18}/></button><h2 id="share-title">{activeRoom?'活动二维码':'分享抽奖结果'}</h2>{activeRoom?<>{resultUrl?<ShareLink url={resultUrl} validity="原链接仅显示本人结果 · 活动创建后 24 小时内有效"/>:<p>正在把开奖结果同步到原活动链接…</p>}</>:resultUrl ? <ShareLink url={resultUrl} validity="关闭发起页面后，此链接将失效"/> : <><p>生成链接后，中奖用户名与抽奖时间会临时上传。关闭发起页面后，分享链接随即失效。</p><button autoFocus disabled={sharing} onClick={publishResult}>{sharing ? '正在生成…':'生成分享链接'}</button></>}</div></div>}
     </div>
   );
