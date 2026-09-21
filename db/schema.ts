@@ -8,6 +8,8 @@ export const rooms = sqliteTable('rooms', {
   joinExpires: integer('join_expires').notNull(),
   expires: integer('expires').notNull(),
   activeUntil: integer('active_until'),
+  resultWinners: text('result_winners'),
+  resultTimestamp: real('result_timestamp'),
 }, table => [index('rooms_expiry').on(table.expires), check('rooms_open_check', sql`${table.open} IN (0, 1)`)]);
 export const participants = sqliteTable('participants', {
   seq: integer('seq').primaryKey({ autoIncrement: true }),

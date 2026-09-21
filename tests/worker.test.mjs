@@ -9,7 +9,7 @@ before(async () => {
   // Execute the actual migration, including multi-statement trigger bodies.
   const files = process.env.LUCKYDOG_TEST_SITES
     ? JSON.parse(await readFile('drizzle/meta/_journal.json', 'utf8')).entries.map(entry => `drizzle/${entry.tag}.sql`)
-    : ['migrations/0001_sharing.sql', 'migrations/0002_ephemeral_sessions.sql'];
+    : ['migrations/0001_sharing.sql', 'migrations/0002_ephemeral_sessions.sql', 'migrations/0003_room_results.sql'];
   for (const file of files) {
     const sql = await readFile(file, 'utf8');
     await db.exec(sql.replace(/--[^\n]*/g, '').replace(/\n/g, ' '));
@@ -79,6 +79,20 @@ test('manual closure and deadlines keep owner access but prohibit new joins and 
   for (const method of ['GET', 'PATCH', 'DELETE']) assert.equal((await api(`rooms/${room.id}`, method, method === 'GET' ? undefined : {}, ownerHeaders(room))).status, 404);
 });
 
+test('one activity link can reopen before its deadline and later show the draw result', async () => {
+  const room = await create();
+  await api(`rooms/${room.id}/join`, 'POST', { name: '同一链接用户' });
+  assert.equal((await api(`rooms/${room.id}`, 'PATCH', { open: false }, ownerHeaders(room))).value.open, false);
+  assert.equal((await api(`rooms/${room.id}`, 'PATCH', { open: true }, ownerHeaders(room))).value.open, true);
+  const published = await api(`rooms/${room.id}`, 'PATCH', { result: { winners: [{ id: 'local', name: '同一链接用户' }], timestamp: 456 } }, ownerHeaders(room));
+  assert.equal(published.status, 200); assert.equal(published.value.open, false);
+  const publicRoom = (await api(`rooms/${room.id}`)).value;
+  assert.equal(publicRoom.open, false); assert.equal(publicRoom.result.timestamp, 456);
+  assert.equal(publicRoom.result.winners[0].name, '同一链接用户'); assert.notEqual(publicRoom.result.winners[0].id, 'local');
+  assert.equal((await api(`rooms/${room.id}`, 'PATCH', { open: true }, ownerHeaders(room))).value.open, false);
+  assert.equal((await api(`rooms/${room.id}/join`, 'POST', { name: '开奖后来客' })).status, 409);
+});
+
 test('close racing with joins returns a final consistent list', async () => {
   const room = await create();
   const joins = Array.from({ length: 15 }, (_, i) => api(`rooms/${room.id}/join`, 'POST', { name: `报名${i}` }, cookie(i + 1)));
@@ -133,6 +147,7 @@ test('invalid and oversized input, unknown routes and API navigation return JSON
   const room = await create();
   for (const bad of ['', ' '.repeat(3), 'x'.repeat(81), null]) assert.equal((await api(`rooms/${room.id}/join`, 'POST', { name: bad })).status, 400);
   for (const bad of [{}, { winners: [], timestamp: 1 }, { winners: [{ name: 'a' }], timestamp: 'bad' }]) assert.equal((await api('results', 'POST', bad)).status, 400);
+  assert.equal((await api(`rooms/${room.id}`, 'PATCH', { result: { winners: [], timestamp: 1 } }, ownerHeaders(room))).status, 400);
   assert.equal((await api('results', 'POST', { winners: [{ name: 'x'.repeat(1024 * 1024) }], timestamp: 1 })).status, 413);
   const malformed = await mf.dispatchFetch('https://luckydog.test/api/rooms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{' });
   assert.equal(malformed.status, 400);

@@ -6,14 +6,15 @@ import { ShareLink } from './ShareLink';
 import { Toast } from './Toast';
 import { importParticipants } from '../services/participants';
 
-type Room = {id:string;owner:string;joinExpires:number;open?:boolean};
+export type ActiveRoom = {id:string;owner:string;joinExpires:number;open?:boolean};
+type Room = ActiveRoom;
 type Step = 'add'|'roster'|'config';
 const countdown = (milliseconds:number) => {
   const seconds=Math.max(0,Math.ceil(milliseconds/1000));
   return `${String(Math.floor(seconds/60)).padStart(2,'0')}:${String(seconds%60).padStart(2,'0')}`;
 };
 
-export function ParticipantSetup({participants,setParticipants,locked,onReady,onReset,isDesktop=false,children}: {participants:Participant[];setParticipants:React.Dispatch<React.SetStateAction<Participant[]>>;locked:boolean;onReady:(ready:boolean)=>void;onReset:()=>void;isDesktop?:boolean;children:React.ReactNode}) {
+export function ParticipantSetup({participants,setParticipants,locked,onReady,onReset,onRoomChange,isDesktop=false,children}: {participants:Participant[];setParticipants:React.Dispatch<React.SetStateAction<Participant[]>>;locked:boolean;onReady:(ready:boolean)=>void;onReset:()=>void;onRoomChange?:(room:ActiveRoom|null)=>void;isDesktop?:boolean;children:React.ReactNode}) {
  const [step,setStep]=useState<Step>(participants.length?'roster':'add');
  const [room,setRoom]=useState<Room|null>(null);
  const [busy,setBusy]=useState(false);
@@ -27,8 +28,10 @@ export function ParticipantSetup({participants,setParticipants,locked,onReady,on
  const polling=useRef(true);
  const lastPollError=useRef('');
  const registrationOpen=Boolean(room?.open!==false&&room&&now<room.joinExpires);
+ const canResume=Boolean(room&&room.open===false&&now<room.joinExpires);
 
  useEffect(()=>{if(!room)return;const timer=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(timer);},[room]);
+ useEffect(()=>{onRoomChange?.(room);},[room?.id,room?.owner,room?.joinExpires,room?.open,onRoomChange]);
  useEffect(()=>{if(!room)return;const dispose=()=>disposeShare(`rooms/${room.id}`,room.owner);window.addEventListener('pagehide',dispose);return()=>window.removeEventListener('pagehide',dispose);},[room]);
  useEffect(()=>onReady(step==='config'),[step,onReady]);
  useEffect(()=>{
@@ -36,11 +39,11 @@ export function ParticipantSetup({participants,setParticipants,locked,onReady,on
   let active=true;
   const poll=async()=>{try{
    const value=await api<{participants:Participant[];open:boolean;joinExpires:number}>(`rooms/${room.id}`,'GET',undefined,room.owner);
-   if(active&&polling.current){setParticipants(value.participants);setRoom(current=>current?{...current,open:value.open,joinExpires:value.joinExpires}:current);lastPollError.current='';}
+   if(active&&polling.current){if(step==='add')setParticipants(value.participants);setRoom(current=>current?{...current,open:value.open,joinExpires:value.joinExpires}:current);lastPollError.current='';}
   }catch(e){const message=(e as Error).message;if(active&&message!==lastPollError.current){setError(message);lastPollError.current=message;}}};
   void poll();const timer=setInterval(poll,2500);
   return()=>{active=false;clearInterval(timer);};
- },[room?.id,setParticipants]);
+ },[room?.id,step,setParticipants]);
  useEffect(()=>{const key=(e:KeyboardEvent)=>{if(e.key==='Escape'&&!busy){setBack(false);setCutoffConfirm(false);}};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);},[busy]);
 
  async function run(fn:()=>Promise<void>){setBusy(true);setError('');try{await fn();}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
@@ -50,6 +53,12 @@ export function ParticipantSetup({participants,setParticipants,locked,onReady,on
   if(!room)return;
   const data=await api<{participants:Participant[]}>(`rooms/${room.id}`,'PATCH',{open:false},room.owner);
   setRoom(current=>current?{...current,open:false}:current);setParticipants(data.participants);setStep('roster');setCutoffConfirm(false);setSuccess('报名已截止，请确认参与名单');onReset();
+ });}
+ async function resumeInvite(){await run(async()=>{
+  if(!room)return;
+  const data=await api<{participants:Participant[];open:boolean}>(`rooms/${room.id}`,'PATCH',{open:true},room.owner);
+  if(!data.open)throw new Error('邀请已到截止时间，无法继续报名');
+  setParticipants(data.participants);setRoom(current=>current?{...current,open:true}:current);setStep('add');setNow(Date.now());setSuccess('报名已重新开放，原二维码和链接继续有效');onReset();
  });}
  const toastMessage=error||success||(registrationOpen&&room?`报名截止倒计时 ${countdown(room.joinExpires-now)}`:'');
  const toastStatus=error?'error':success?'success':'info';
@@ -77,7 +86,7 @@ export function ParticipantSetup({participants,setParticipants,locked,onReady,on
     <button className="import-button" disabled={busy} onClick={()=>void run(async()=>{const value=await api<Room>('rooms','POST',{durationMinutes:duration});polling.current=true;setParticipants([]);setNow(Date.now());setRoom({...value,open:true});})}>{busy?'正在创建…':'创建抽奖邀请'}</button>}
    </div>
   </>:<>
-   <div className="roster-heading"><strong>当前参与名单 <b>{participants.length}</b></strong><button disabled={locked||busy} className="back-button" onClick={()=>setBack(true)}><ChevronLeft size={15} aria-hidden="true"/>重新报名</button></div>
+   <div className="roster-heading"><strong>当前参与名单 <b>{participants.length}</b></strong><div className="roster-heading-actions">{canResume&&<button disabled={locked||busy} className="back-button resume-button" onClick={()=>void resumeInvite()}>继续报名</button>}<button disabled={locked||busy} className="back-button" onClick={()=>setBack(true)}><ChevronLeft size={15} aria-hidden="true"/>重新报名</button></div></div>
    <div className="roster-table"><table><thead><tr><th>序号</th><th>用户名</th><th className="remove-column"><span className="sr-only">操作</span></th></tr></thead><tbody>{participants.map((p,index)=><tr key={p.id}><td>{String(index+1).padStart(2,'0')}</td><td>{p.name}</td><td className="remove-column"><button aria-label={`删除 ${p.name}`} disabled={locked||busy} onClick={()=>{setParticipants(previous=>previous.filter(item=>item.id!==p.id));setSuccess('已从本次抽奖名单中移除');}}><X size={14}/></button></td></tr>)}</tbody></table>{!participants.length&&<p className="empty-roster">本次报名暂无参与者</p>}</div>
    <div className="flow-footer"><button className="import-button" disabled={locked||busy||!participants.length} onClick={()=>setStep('config')}>确认名单</button></div>
   </>}

@@ -81,6 +81,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .flicker-name { width: 100%; margin: 56px 0 24px; color: #2f2820; font-size: clamp(48px, 8vw, 108px); font-weight: 700; line-height: 1.08; overflow-wrap: anywhere; animation: flicker .12s infinite; }
 .drawing-state p { color: #9a8c7a; font-size: 13px; }
 .result-state { position: relative; z-index: 1; width: 100%; height: 100%; min-height: 0; padding: 30px clamp(24px, 4vw, 64px) 24px; display: flex; flex-direction: column; align-items: center; animation: reveal .65s ease both; }
+.party-poppers { position:absolute; inset:0; pointer-events:none; overflow:hidden; }
+.party-poppers svg { position:absolute; bottom:7%; width:64px; height:64px; color:#a87035; filter:drop-shadow(0 10px 15px #71451d28); animation:party-pop-left .85s cubic-bezier(.18,.8,.2,1) both; }
+.party-poppers svg:first-child { left:5%; transform:rotate(-24deg); }
+.party-poppers svg:last-child { right:5%; transform:scaleX(-1) rotate(-24deg); animation-name:party-pop-right; }
+@keyframes party-pop-left { 0% {opacity:0;translate:-25px 35px;scale:.5;rotate:-18deg;} 55% {opacity:1;translate:8px -9px;scale:1.15;rotate:6deg;} 100% {opacity:.82;translate:0 0;scale:1;rotate:0;} }
+@keyframes party-pop-right { 0% {opacity:0;translate:25px 35px;scale:.5;rotate:18deg;} 55% {opacity:1;translate:-8px -9px;scale:1.15;rotate:-6deg;} 100% {opacity:.82;translate:0 0;scale:1;rotate:0;} }
 .result-heading { text-align: center; flex: none; }
 .result-heading h1 { margin-top: 7px; font-size: clamp(36px, 4.5vw, 62px); }
 .result-heading p { margin: 8px 0 0; color: #8c7b66; font-size: 13px; }
@@ -155,6 +161,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .invite-box p { margin:0; font-size:11px; line-height:1.7; }
 .roster-heading { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; font-size:12px; }
 .roster-heading b { color:#9a6a3a; margin-left:5px; }
+.roster-heading-actions { display:flex; align-items:center; gap:6px; }
+.resume-button { color:#fffaf1; border-color:#8b633d; background:#936a42; }
+.resume-button:hover { background:#7d5531; }
 .text-button { display:flex; align-items:center; justify-content:center; gap:4px; padding:5px; background:none; border:0; font-size:11px; color:#94724c; }
 .roster-table { flex:1; min-height:100px; overflow:auto; border:1px solid #e8ded0; border-radius:12px; background:#fffdf8; }
 .roster-table table { width:100%; border-collapse:collapse; table-layout:fixed; font-size:12px; text-align:left; }
@@ -373,4 +382,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
  .shared-page { padding:18px 12px; }
  .shared-topbar { margin-bottom:22px; }
  .join-card { padding:25px 20px; }
+ .roster-heading { align-items:flex-start; gap:8px; }
+ .roster-heading-actions { flex-wrap:wrap; justify-content:flex-end; }
+ .party-poppers svg { width:42px; height:42px; bottom:4%; }
 }

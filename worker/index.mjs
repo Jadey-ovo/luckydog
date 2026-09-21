@@ -7,6 +7,10 @@ const name = value => {
   if (typeof value !== 'string' || !value.trim() || value.trim().length > 80) fail('用户名请填写 1–80 个字符');
   return value.trim();
 };
+const drawResult = value => {
+  if (!value || !Array.isArray(value.winners) || !value.winners.length || value.winners.length > 5000 || !Number.isFinite(value.timestamp)) fail('中奖名单无效');
+  return { winners: value.winners.map(participant => ({ id: crypto.randomUUID(), name: name(participant?.name) })), timestamp: value.timestamp };
+};
 const databaseErrors = {
   ROOM_GONE: ['邀请已过期或不存在', 404],
   ROOM_CLOSED: ['报名已结束', 409],
@@ -67,7 +71,7 @@ export default {
         const room = await db.prepare(`SELECT * FROM rooms WHERE id = ? AND expires >= ${SQL_NOW}
           AND (active_until IS NULL OR active_until >= ${SQL_NOW})`).bind(id).first();
         if (!room) fail('邀请已过期或不存在', 404);
-        const registrationOpen = !!room.open && Date.now() < room.join_expires;
+        const registrationOpen = !room.result_winners && !!room.open && Date.now() < room.join_expires;
         if (action === 'join' && request.method === 'POST') {
           if (!registrationOpen) fail('报名已结束', 409);
           let voter = /(?:^|;\s*)luckydog-voter=([a-f0-9]{48})(?:;|$)/.exec(request.headers.get('cookie') || '')?.[1];
@@ -90,12 +94,22 @@ export default {
           ]);
           const current = snapshot[0].results[0];
           if (!current) fail('邀请已过期或不存在', 404);
-          return send(200, { ...(owner ? { participants: snapshot[1].results } : { count: snapshot[1].results[0].count }), open: !!current.registration_open, joinExpires: current.join_expires });
+          const result = current.result_winners ? { winners: JSON.parse(current.result_winners), timestamp: current.result_timestamp } : null;
+          return send(200, { ...(owner ? { participants: snapshot[1].results } : { count: snapshot[1].results[0].count }), open: !!current.registration_open, joinExpires: current.join_expires, ...(result ? { result } : {}) });
         }
         if (!owner) fail('无权管理此活动', 403);
         if (request.method === 'PATCH') {
+          if (body?.result !== undefined) {
+            const result = drawResult(body.result);
+            const updated = await db.prepare(`UPDATE rooms SET open = 0, result_winners = ?, result_timestamp = ?, active_until = ?
+              WHERE id = ? AND expires >= ${SQL_NOW} AND (active_until IS NULL OR active_until >= ${SQL_NOW}) RETURNING open`)
+              .bind(JSON.stringify(result.winners), result.timestamp, Date.now() + SESSION_LEASE, id).first();
+            if (!updated) fail('邀请已过期或不存在', 404);
+            const participants = await db.prepare('SELECT id, name FROM participants WHERE room_id = ? ORDER BY seq').bind(id).all();
+            return send(200, { participants: participants.results, open: false, result });
+          }
           const snapshot = await db.batch([
-            db.prepare(`UPDATE rooms SET open = (? = 1 AND join_expires > ${SQL_NOW}), active_until = ?
+            db.prepare(`UPDATE rooms SET open = (? = 1 AND join_expires > ${SQL_NOW} AND result_winners IS NULL), active_until = ?
               WHERE id = ? AND expires >= ${SQL_NOW} AND (active_until IS NULL OR active_until >= ${SQL_NOW}) RETURNING open`)
               .bind(body?.open === true ? 1 : 0, Date.now() + SESSION_LEASE, id),
             db.prepare('SELECT id, name FROM participants WHERE room_id = ? ORDER BY seq').bind(id),
@@ -109,8 +123,7 @@ export default {
         }
       }
       if (kind === 'results' && !id && request.method === 'POST') {
-        if (!Array.isArray(body?.winners) || !body.winners.length || body.winners.length > 5000 || !Number.isFinite(body.timestamp)) fail('中奖名单无效');
-        const winners = body.winners.map(p => ({ id: crypto.randomUUID(), name: name(p?.name) }));
+        const winners = drawResult(body).winners;
         const id = token(), owner = token(), now = Date.now();
         const inserted = await db.prepare(`INSERT INTO results (id, owner, winners, timestamp, expires, active_until)
           SELECT ?, ?, ?, ?, ?, ? WHERE (SELECT COUNT(*) FROM results WHERE expires >= ${SQL_NOW}) < 10000`)

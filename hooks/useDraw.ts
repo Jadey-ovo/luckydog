@@ -26,8 +26,9 @@ export function useDraw() {
         setCurrentResult({ winners, timestamp: Date.now() });
         setStatus(DrawStatus.FINISHED);
         playCelebrationSound();
-        confetti({ particleCount: 180, spread: 110, startVelocity: 45, origin: { x: 0.2, y: 0.65 }, disableForReducedMotion: true });
-        confetti({ particleCount: 180, spread: 110, startVelocity: 45, origin: { x: 0.8, y: 0.65 }, disableForReducedMotion: true });
+        confetti({ particleCount: 150, angle: 62, spread: 72, startVelocity: 56, origin: { x: 0.06, y: 0.82 }, disableForReducedMotion: true });
+        confetti({ particleCount: 150, angle: 118, spread: 72, startVelocity: 56, origin: { x: 0.94, y: 0.82 }, disableForReducedMotion: true });
+        window.setTimeout(() => confetti({ particleCount: 90, spread: 125, startVelocity: 32, origin: { x: 0.5, y: 0.38 }, disableForReducedMotion: true }), 220);
       }
     }, 100);
   }

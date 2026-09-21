@@ -28,10 +28,21 @@ test('invitation registration updates live and early cutoff is confirmed',async(
  await guestPage.reload();
  await expect(guestPage.getByRole('heading',{name:'该活动已结束'})).toBeVisible();
  await expect(guestPage.getByLabel('用户名')).toHaveCount(0);
+ await page.getByRole('button',{name:'继续报名'}).click();
+ await expect(page.getByRole('button',{name:'截止报名'})).toBeVisible();
+ await guestPage.reload();await expect(guestPage.getByRole('heading',{name:'加入这场好运'})).toBeVisible();
+ await page.getByRole('button',{name:'截止报名'}).click();await page.getByRole('button',{name:'确认截止'}).click();
  await page.getByRole('button',{name:'确认名单',exact:true}).click();
  await expect(page.locator('.participant-card-name')).toHaveText('扫码来客');
  await expect(page.getByText('当前已参与 1 名用户')).toBeVisible();
  await expect(page.getByRole('button',{name:'开始抽奖'})).toBeEnabled();
+ await page.getByRole('button',{name:'开始抽奖'}).click();
+ await expect(page.getByRole('heading',{name:'幸运名单'})).toBeVisible();
+ await page.screenshot({path:'test-results/same-link-result.png'});
+ await expect(guestPage.getByRole('heading',{name:'幸运名单'})).toBeVisible({timeout:10000});
+ expect(guestPage.url()).toBe(url);
+ await page.getByRole('button',{name:'查看活动二维码'}).click();
+ await expect(page.getByLabel('分享链接')).toHaveValue(url);
  await guest.close();
 });
 

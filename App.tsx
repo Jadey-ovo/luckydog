@@ -1,13 +1,13 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Info, ChevronLeft, Share2, Github, Minus, Play,
-  Plus, ShieldCheck, Sparkles, Trophy,
+  Plus, ShieldCheck, Sparkles, Trophy, PartyPopper,
   X,
 } from 'lucide-react';
 import { DrawStatus } from './types';
 import { useParticipants } from './hooks/useParticipants';
 import { useDraw } from './hooks/useDraw';
-import { ParticipantSetup } from './components/ParticipantSetup';
+import { ParticipantSetup, type ActiveRoom } from './components/ParticipantSetup';
 import { SharedPage } from './components/SharedPage';
 import { Toast } from './components/Toast';
 import { ShareLink } from './components/ShareLink';
@@ -22,10 +22,12 @@ const App: React.FC = () => {
   const [shareOpen, setShareOpen] = useState(false);
   const [resultUrl, setResultUrl] = useState('');
   const [resultShare, setResultShare] = useState<{id:string;owner:string}|null>(null);
+  const [activeRoom, setActiveRoom] = useState<ActiveRoom|null>(null);
   const [shareError, setShareError] = useState('');
   const [sharing, setSharing] = useState(false);
   const [winnerCount, setWinnerCount] = useState(1);
   const [privacyVisible, setPrivacyVisible] = useState(true);
+  const publishedRoomResult = useRef(0);
   const { status, currentResult, flickerName, startDraw, resetDraw } = useDraw();
   const drawing = status === DrawStatus.DRAWING;
   const canDraw = ready && participants.length > 0 && winnerCount <= participants.length;
@@ -43,6 +45,16 @@ const App: React.FC = () => {
     return () => { clearInterval(timer); window.removeEventListener('pagehide', dispose); };
   }, [resultShare]);
 
+  useEffect(() => {
+    if (!currentResult || !activeRoom || isDesktop || publishedRoomResult.current === currentResult.timestamp) return;
+    publishedRoomResult.current = currentResult.timestamp;
+    setSharing(true); setShareError('');
+    void api(`rooms/${activeRoom.id}`, 'PATCH', { result: currentResult }, activeRoom.owner)
+      .then(() => setResultUrl(shareUrl('join', activeRoom.id)))
+      .catch(error => { publishedRoomResult.current = 0; setShareError((error as Error).message); })
+      .finally(() => setSharing(false));
+  }, [currentResult, activeRoom?.id, activeRoom?.owner, isDesktop]);
+
   const helperText = useMemo(() => {
     if (!ready) return '先确认参与名单，再设置本轮中奖名额。';
     if (winnerCount === 1) return `${participants.length} 位朋友已经就位，今天的幸运儿会是谁？`;
@@ -51,7 +63,7 @@ const App: React.FC = () => {
 
   const clearSharedResult = () => {
     if (resultShare) disposeShare(`results/${resultShare.id}`, resultShare.owner);
-    setResultShare(null); setResultUrl('');
+    setResultShare(null); if (!activeRoom) setResultUrl('');
   };
   const draw = () => { clearSharedResult(); setShareError(''); startDraw(participants, winnerCount); };
   const publishResult = async () => {
@@ -94,7 +106,7 @@ const App: React.FC = () => {
             <span className="ready-dot">{canDraw ? '已就绪' : '待配置'}</span>
           </div>
 
-          <ParticipantSetup participants={participants} setParticipants={setParticipants} locked={drawing} onReady={setReady} onReset={resetDraw} isDesktop={isDesktop}>
+          <ParticipantSetup participants={participants} setParticipants={setParticipants} locked={drawing} onReady={setReady} onReset={resetDraw} onRoomChange={setActiveRoom} isDesktop={isDesktop}>
           <section className="setting-block">
             <div className="setting-label"><span>中奖名额</span><small>不超过参与人数</small></div>
             <div className="count-stepper">
@@ -135,6 +147,7 @@ const App: React.FC = () => {
 
           {status === DrawStatus.FINISHED && currentResult && (
             <div className="result-state">
+              <div className="party-poppers" aria-hidden="true"><PartyPopper/><PartyPopper/></div>
               <div className="result-heading">
                 <span className="stage-kicker">CONGRATULATIONS</span>
                 <h1>幸运名单</h1>
@@ -150,14 +163,14 @@ const App: React.FC = () => {
               </div>
               <div className="result-actions">
                 <button className="primary" onClick={()=>{clearSharedResult();resetDraw();}}><ChevronLeft size={15} aria-hidden="true"/>返回</button>
-                <button onClick={() => setShareOpen(true)}><Share2 size={17} />分享抽奖结果</button>
+                <button onClick={() => setShareOpen(true)}><Share2 size={17} />{activeRoom?'查看活动二维码':'分享抽奖结果'}</button>
               </div>
             </div>
           )}
         </section>
       </main>
       <Toast message={shareError} onClose={()=>setShareError('')}/>
-      {shareOpen && <div className="modal-backdrop"><div className="dialog" role="dialog" aria-modal="true" aria-labelledby="share-title"><button className="dialog-close" aria-label="关闭弹窗" disabled={sharing} onClick={()=>setShareOpen(false)}><X size={18}/></button><h2 id="share-title">分享抽奖结果</h2>{resultUrl ? <ShareLink url={resultUrl} validity="关闭发起页面后，此链接将失效"/> : <><p>生成链接后，中奖用户名与抽奖时间会临时上传。关闭发起页面后，分享链接随即失效。</p><button autoFocus disabled={sharing} onClick={publishResult}>{sharing ? '正在生成…':'生成分享链接'}</button></>}</div></div>}
+      {shareOpen && <div className="modal-backdrop"><div className="dialog" role="dialog" aria-modal="true" aria-labelledby="share-title"><button className="dialog-close" aria-label="关闭弹窗" disabled={sharing} onClick={()=>setShareOpen(false)}><X size={18}/></button><h2 id="share-title">{activeRoom?'活动二维码':'分享抽奖结果'}</h2>{activeRoom?<>{resultUrl?<ShareLink url={resultUrl} validity="原报名二维码和链接现已显示抽奖结果"/>:<p>正在把开奖结果同步到原活动链接…</p>}</>:resultUrl ? <ShareLink url={resultUrl} validity="关闭发起页面后，此链接将失效"/> : <><p>生成链接后，中奖用户名与抽奖时间会临时上传。关闭发起页面后，分享链接随即失效。</p><button autoFocus disabled={sharing} onClick={publishResult}>{sharing ? '正在生成…':'生成分享链接'}</button></>}</div></div>}
     </div>
   );
 };
