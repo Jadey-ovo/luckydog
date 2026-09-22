@@ -311,14 +311,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .qr-frame img { display:block; border-radius:10px; }
 .qr-frame > span { position:absolute; inset:0; display:grid; place-items:center; text-align:center; border-radius:10px; color:#795b3d; background:#f8f1e8df; font-size:13px; font-weight:700; line-height:1.8; }
 .share-link-expired input { color:#a18f7a; background:#eee8df; text-decoration:line-through; }
-.live-roster-heading { display:flex; align-items:center; justify-content:space-between; padding-top:4px; border-top:1px solid #e9ded0; }
-.live-roster-heading strong { font-size:12px; }
-.live-roster-heading span { padding:4px 8px; border-radius:999px; color:#7c5b37; background:#eee2d1; font-size:10px; }
-.live-roster { min-height:70px; flex:1; overflow:auto; border:1px solid #eadfd1; border-radius:11px; background:#fffdf9; }
-.live-roster > div { display:grid; grid-template-columns:38px minmax(0,1fr); padding:8px 10px; border-bottom:1px solid #f0e7db; font-size:11px; }
-.live-roster > div span { color:#ad916f; font-family:Georgia,serif; }
-.live-roster > div strong { min-width:0; overflow-wrap:anywhere; color:#4a4035; font-size:11px; }
-.live-roster > p { display:grid; min-height:68px; place-items:center; color:#ad9d89; }
 
 /* Live participant wall */
 .idle-state { width:100%; height:100%; min-height:0; }
@@ -417,11 +409,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 @keyframes guest-spin { to { transform:rotate(360deg); } }
 .guest-description { margin:0 0 22px; color:#8a775f; font-size:14px; line-height:1.9; overflow-wrap:anywhere; }
 .guest-caption { margin:18px 0 0; color:#9a8974; font-size:12px; line-height:1.8; }
-.guest-identity { display:grid; grid-template-columns:48px minmax(0,1fr) 16px; gap:14px; align-items:center; padding:20px; margin:24px 0 0; text-align:left; border:1px solid #eadfce; border-radius:16px; background:#f7f2e9; }
+.guest-identity { display:flex; flex-direction:column; gap:14px; align-items:center; padding:24px 20px; margin:24px 0 0; text-align:center; border:1px solid #eadfce; border-radius:16px; background:#f7f2e9; }
 .guest-avatar { display:grid; place-items:center; width:48px; height:48px; border-radius:16px; background:#e8dac5; color:#91683c; font-size:23px; font-weight:700; }
-.guest-identity-label { display:block; margin-bottom:6px; color:#9a886f; font:11px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
-.guest-identity strong { display:block; font-size:23px; line-height:1.4; color:#493828; overflow-wrap:anywhere; }
-.guest-identity > svg { color:#869473; }
+.guest-identity strong { display:block; max-width:100%; font-size:23px; line-height:1.4; color:#493828; overflow-wrap:anywhere; }
 .guest-card form { display:flex; flex-direction:column; gap:12px; text-align:left; }
 .guest-card form label { font-size:12px; color:#79644b; }
 .guest-card input { width:100%; min-width:0; min-height:48px; padding:12px 14px; border:1px solid #d9c7ac; border-radius:12px; background:#fffefa; color:#483729; font-size:16px; }
@@ -450,7 +440,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
  .participant-page { padding:20px 16px 18px; }
  .guest-topbar { margin-bottom:28px; }
  .guest-card { padding:30px 22px 24px; border-radius:22px; }
- .guest-identity { padding:16px; gap:12px; grid-template-columns:42px minmax(0,1fr) 16px; }
+ .guest-identity { padding:20px 16px; gap:12px; }
  .guest-avatar { width:42px; height:42px; border-radius:14px; font-size:21px; }
  .guest-identity strong { font-size:21px; }
  .privacy-banner { flex-wrap:wrap; justify-content:flex-start; gap:6px 10px; }

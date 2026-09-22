@@ -23,8 +23,8 @@ test('invitation lifecycle keeps the visitor informed and supports redraw or cle
  await expect(guestPage.locator('.join-notes')).toHaveCount(0);
  await expect(guestPage.getByText(/Cookie|更换设备/)).toHaveCount(0);
  await request.post(`/api/rooms/${id}/join`,{headers:{Cookie:`luckydog-voter=${'2'.padStart(48,'0')}`},data:{name:'待移除用户'}});
- await expect(page.getByLabel('实时参与名单')).toContainText('扫码来客');
- await expect(page.getByLabel('实时参与名单')).toContainText('待移除用户');
+ await expect(page.locator('.participant-card-grid')).toContainText('扫码来客');
+ await expect(page.locator('.participant-card-grid')).toContainText('待移除用户');
  await page.getByRole('button',{name:'截止报名'}).click();
  await expect(page.getByRole('dialog')).toContainText('距离自动截止还有');
  await page.getByRole('button',{name:'继续报名'}).click();
@@ -83,7 +83,7 @@ test('copy reports success only in a toast',async({page,context})=>{
  await createInvite(page);
  await page.getByRole('button',{name:'复制链接'}).click();
  await expect(page.locator('.toast-success')).toHaveText(/邀请链接复制成功/);
- await expect(page.locator('.share-link small')).not.toContainText('已复制');
+ await expect(page.locator('.share-link small')).toHaveCount(0);
 });
 
 test('product manual is available from the top right',async({page})=>{
@@ -100,7 +100,7 @@ test('product manual is available from the top right',async({page})=>{
 test('large live roster uses compact cards and keeps the draw action visible',async({page,request})=>{
  const url=await createInvite(page);const id=/#join=([a-f0-9]{48})$/.exec(url)![1];
  for(let i=1;i<=36;i++) await request.post(`/api/rooms/${id}/join`,{headers:{Cookie:`luckydog-voter=${i.toString(16).padStart(48,'0')}`},data:{name:`参与者${i}`}});
- await expect(page.getByLabel('实时参与名单').locator('> div')).toHaveCount(36,{timeout:10000});
+ await expect(page.locator('.participant-card-grid .participant-card')).toHaveCount(36,{timeout:10000});
  await page.getByRole('button',{name:'截止报名'}).click();await page.getByRole('button',{name:'确认截止'}).click();await page.getByRole('button',{name:'确认名单',exact:true}).click();
  await expect(page.locator('.participant-card')).toHaveCount(36);
  await expect(page.locator('.participant-card-grid')).toHaveClass(/dense/);
@@ -267,10 +267,11 @@ for(const viewport of [{width:320,height:640},{width:768,height:600},{width:1024
  test(`full host flow fits ${viewport.width}x${viewport.height}`,async({page,request})=>{
   await page.setViewportSize(viewport);const url=await createInvite(page);
   await page.getByRole('button',{name:'查看信息安全说明'}).focus();
-  await expect(page.getByRole('tooltip').filter({hasText:'数据保护说明'})).toBeVisible();
+  await expect(page.getByRole('tooltip').filter({hasText:'名单由 Sites 临时托管'})).toBeVisible();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await page.getByRole('button',{name:'复制链接'}).focus();const id=/#join=([a-f0-9]{48})$/.exec(url)![1];
-  await expect(page.getByText('分享邀请',{exact:true})).toHaveCount(0);await expect(page.locator('.ready-dot')).toHaveCount(0);
+  await expect(page.getByText('分享邀请',{exact:true})).toHaveCount(0);
+  await expect(page.locator('.live-roster,.live-roster-heading,.share-link small')).toHaveCount(0);await expect(page.locator('.ready-dot')).toHaveCount(0);
   await expect(page.getByRole('button',{name:'清空本次活动',exact:true})).toHaveCount(0);
   await request.post(`/api/rooms/${id}/join`,{data:{name:'虚构窗口体验者'}});
   await page.getByRole('button',{name:'截止报名'}).click();await page.getByRole('button',{name:'确认截止'}).click();
@@ -294,6 +295,10 @@ test('participant state layouts use consistent identity and separate footer text
   state={...state,state:status,open:status==='open',personalResult:status==='drawn'?{round:1,won:true,timestamp:Date.now()}:undefined,history:status==='drawn'?[{round:1,won:true,timestamp:Date.now()}]:undefined};
   await expect(page.getByRole('heading',{name:title,exact:true})).toBeVisible();
   await expect(page.locator('.guest-identity strong')).toHaveText(state.participant.name);
+  await expect(page.getByText('报名用户名',{exact:true})).toHaveCount(0);
+  await expect(page.locator('.guest-identity svg')).toHaveCount(0);
+  expect(await page.locator('.guest-identity').evaluate(el=>getComputedStyle(el).textAlign)).toBe('center');
+  if(status==='closed') await expect(page.locator('.guest-card h1 + .guest-description')).toHaveText('请等待发起人公布抽奖结果。');
   await expect(page.locator('.join-notes')).toHaveCount(0);
   await expect(page.locator('.guest-card')).not.toContainText('查询有效至');
   await expect(page.locator('.guest-footer')).toContainText('查询有效至');

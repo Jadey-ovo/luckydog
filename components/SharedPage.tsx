@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Check, Clock3, Trophy, Sparkles, CircleSlash, WifiOff, LoaderCircle } from 'lucide-react';
+import { Clock3, Trophy, Sparkles, CircleSlash, WifiOff, LoaderCircle } from 'lucide-react';
 import { api, ApiError } from '../services/sharing';
 import type { DrawResult } from '../types';
 
@@ -13,7 +13,7 @@ const countdown=(milliseconds:number)=>{const seconds=Math.max(0,Math.ceil(milli
 const time=(timestamp:number)=>new Date(timestamp).toLocaleString('zh-CN');
 
 function GuestIdentity({name}:{name:string}) {
- return <div className="guest-identity"><span className="guest-avatar" aria-hidden="true">{Array.from(name.trim())[0]}</span><div><span className="guest-identity-label">报名用户名</span><strong>{name}</strong></div><Check size={16} aria-label="已报名"/></div>;
+ return <div className="guest-identity"><span className="guest-avatar" aria-hidden="true">{Array.from(name.trim())[0]}</span><strong>{name}</strong></div>;
 }
 
 export function SharedPage({kind,id}:{kind:string;id:string}) {
@@ -75,15 +75,16 @@ export function SharedPage({kind,id}:{kind:string;id:string}) {
   const closed=!registrationOpen;
   const title=ended?'活动已结束':interrupted?'活动已中断':closed?'报名已截止':self?'报名成功':'加入这场好运';
   content=<section className="guest-card">
-   <div className={`guest-state-icon ${ended||interrupted?'muted':self?'success':''}`}>{ended||interrupted?<CircleSlash/>:self?<Check/>:<Clock3/>}</div>
+   {(!self||closed)&&<div className={`guest-state-icon ${ended||interrupted?'muted':''}`}>{ended||interrupted?<CircleSlash/>:<Clock3/>}</div>}
    <h1>{title}</h1>
+   {ended?<p className="guest-description">本次活动已结束，未进行开奖。</p>:interrupted?<p className="guest-description">本次活动未完成开奖，请联系发起人。</p>:closed?<p className="guest-description">{self?'请等待发起人公布抽奖结果。':'本次报名已截止，暂未开奖。'}</p>:null}
    {self&&<GuestIdentity name={self.name}/>}
-   {ended?<p className="guest-description">本次活动已结束，未进行开奖。</p>:interrupted?<p className="guest-description">本次活动未完成开奖，请联系发起人。</p>:closed?<p className="guest-description">{self?'请等待发起人公布抽奖结果。':'本次报名已截止，暂未开奖。'}</p>:self?<p className="guest-caption">本页会在开奖后自动显示本人结果。</p>:<>
+   {registrationOpen&&(self?<p className="guest-caption">本页会在开奖后自动显示本人结果。</p>:<>
     <p className="guest-description">填写用户名，给自己一份好运。</p>
     <div className="guest-countdown" role="timer"><Clock3 size={16}/><span>报名截止倒计时</span><strong>{countdown(room.joinExpires-now)}</strong></div>
     <form onSubmit={async event=>{event.preventDefault();setBusy(true);setError('');try{await api(`rooms/${encodeURIComponent(id)}/join`,'POST',{name});setRoom(current=>current?{...current,participant:{name:name.trim()}}:current);}catch(caught){setError((caught as Error).message);}finally{setBusy(false);}}}><label htmlFor="guest-name">用户名</label><input id="guest-name" placeholder="你希望被叫到的名字" autoComplete="nickname" required maxLength={80} value={name} onChange={event=>setName(event.target.value)} disabled={busy}/><button className="import-button" disabled={busy||!name.trim()}>{busy?'正在提交…':'确认参与'}</button></form>
     <ol className="join-notes"><li>请填写用于抽奖的用户名。</li><li>提交成功后等待发起人开奖。</li><li>原二维码和链接会在开奖后显示本人结果。</li></ol>
-   </>}
+   </>)}
    {error&&<p role="alert" className="inline-error">{error}</p>}
   </section>;
  }else if(result){

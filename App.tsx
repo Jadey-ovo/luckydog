@@ -109,8 +109,8 @@ const App: React.FC = () => {
       {!isDesktop && privacyVisible && (
         <div className="privacy-banner" role="status">
           <ShieldCheck size={16} />
-          <span className="privacy-summary">个人信息仅用于活动报名与抽奖，参与者仅可查询本人记录。
-            <span className="info-bubble privacy-info"><button aria-label="查看信息安全说明" aria-describedby="privacy-details"><Info size={15}/></button><span id="privacy-details" role="tooltip">数据保护说明：报名用户名、匿名浏览器标识和抽奖记录由 Sites 托管服务处理。完整名单仅向持管理凭据的发起人开放，参与者只能查询本人记录。活动创建满 24 小时后停止访问，过期数据由服务自动清理。不使用广告或行为分析 SDK；平台日志与备份保留规则详见隐私说明。</span></span>
+          <span className="privacy-summary">数据仅用于报名与抽奖，创建满 24 小时后停止查询并自动清理。
+            <span className="info-bubble privacy-info"><button aria-label="查看信息安全说明" aria-describedby="privacy-details"><Info size={15}/></button><span id="privacy-details" role="tooltip">名单由 Sites 临时托管，参与者仅可查看本人记录；过期清理及平台日志、备份规则详见隐私说明。</span></span>
           </span>
           <a href="./privacy.html" target="_blank" rel="noopener noreferrer">隐私说明</a>
           <a href="https://github.com/Jadey-ovo/luckydog/releases/latest" target="_blank" rel="noopener noreferrer">下载桌面版</a>

@@ -80,9 +80,7 @@ export function ParticipantSetup({participants,setParticipants,locked,onReady,on
    <div className="method-content invite-only-content">
     {isDesktop?<div className="names-block"><textarea aria-label="参与名单" placeholder={'张三\n李四'} value={manualText} onChange={event=>setManualText(event.target.value)}/></div>:<div className="invite-box">{room?<>
       <div className={`registration-status ${registrationOpen?'is-open':'is-closed'}`}><Clock3 size={15}/><span>{unavailable?'活动已中断或过期':registrationOpen?'报名进行中':'报名已截止'}</span><b>{registrationOpen?countdown(room.joinExpires-now):new Date(room.joinExpires).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})}</b></div>
-      <ShareLink url={shareUrl('join',room.id)} validity={`${new Date(room.joinExpires).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})} 报名截止 · 创建后 24 小时内可查询`} onCopied={()=>setSuccess('邀请链接复制成功')} onError={setError}/>
-      <div className="live-roster-heading"><strong>参与名单</strong><span>已报名 {participants.length} 人</span></div>
-      <div className="live-roster" aria-label="实时参与名单">{participants.length?participants.map((participant,index)=><div key={participant.id}><span>{String(index+1).padStart(2,'0')}</span><strong>{participant.name}</strong></div>):<p>等待第一位参与者报名</p>}</div>
+      <ShareLink url={shareUrl('join',room.id)} validity="" onCopied={()=>setSuccess('邀请链接复制成功')} onError={setError}/>
      </>:<><strong>邀请朋友参与抽奖</strong><ol><li>选择报名时长，生成二维码与链接。</li><li>参与者提交用户名后，名单会实时出现。</li><li>到期自动截止，也可以随时提前截止。</li></ol><fieldset className="invite-duration"><legend>报名时长</legend><div>{[5,10,30].map(minutes=><button type="button" key={minutes} aria-pressed={duration===minutes} onClick={()=>setDuration(minutes)}>{minutes} 分钟</button>)}</div></fieldset></>}
     </div>}
    </div>
