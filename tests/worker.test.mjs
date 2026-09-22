@@ -9,7 +9,7 @@ before(async () => {
   // Execute the actual migration, including multi-statement trigger bodies.
   const files = process.env.LUCKYDOG_TEST_SITES
     ? JSON.parse(await readFile('drizzle/meta/_journal.json', 'utf8')).entries.map(entry => `drizzle/${entry.tag}.sql`)
-    : ['migrations/0001_sharing.sql', 'migrations/0002_ephemeral_sessions.sql', 'migrations/0003_room_results.sql', 'migrations/0004_activity_history.sql', 'migrations/0005_round_history.sql'];
+    : ['migrations/0001_sharing.sql', 'migrations/0002_ephemeral_sessions.sql', 'migrations/0003_room_results.sql', 'migrations/0004_activity_history.sql', 'migrations/0005_round_history.sql', 'migrations/0006_result_session.sql'];
   for (const file of files) {
     if (file.includes('0004_')) {
       const now = Date.now();

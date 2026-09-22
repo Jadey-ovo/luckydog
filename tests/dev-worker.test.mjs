@@ -57,6 +57,7 @@ test('local dev upgrades a 0004 database, restarts for new migrations, and stops
     // Registration guards prohibit joining after the result exists. Seed the saved round afterwards.
     await run(['d1','execute','DB','--local','--command',`UPDATE rooms SET open=0,result_winners='${winners}',result_timestamp=123 WHERE id='${id}';`]);
     await copyFile(resolve('migrations/0005_round_history.sql'), join(migrations,'0005_round_history.sql'));
+    await copyFile(resolve('migrations/0006_result_session.sql'), join(migrations,'0006_result_session.sql'));
     const port=await freePort();const url=`http://127.0.0.1:${port}/api/rooms/${id}`;
     const start = () => launch(resolve('scripts/dev-worker.mjs'), [], {LUCKYDOG_DEV_CONFIG:config,LUCKYDOG_DEV_STATE:state,LUCKYDOG_DEV_PORT:String(port)});
     const statuses=[];
@@ -65,23 +66,23 @@ test('local dev upgrades a 0004 database, restarts for new migrations, and stops
     await until(async()=>(await read())?.history?.length===1,()=>supervisor.output());
     assert.deepEqual((await read()).history,[{round:1,timestamp:123,won:true}]);
     assert.match(supervisor.output(),/数据库已就绪/);
-    await writeFile(join(migrations,'0006_local_probe.sql'),'CREATE TABLE local_migration_probe (value TEXT);');
+    await writeFile(join(migrations,'0007_local_probe.sql'),'CREATE TABLE local_migration_probe (value TEXT);');
     await until(()=>supervisor.output().split('数据库已就绪').length===3,()=>supervisor.output());
     await until(async()=>(await read())?.history?.length===1,()=>supervisor.output());
     assert.match(supervisor.output(),/检测到新增迁移/);
     await run(['d1','execute','DB','--local','--command',"INSERT INTO local_migration_probe VALUES ('applied');"]);
-    await writeFile(join(migrations,'0007_invalid.sql'),'THIS IS NOT VALID SQL;');
+    await writeFile(join(migrations,'0008_invalid.sql'),'THIS IS NOT VALID SQL;');
     await until(()=>supervisor.child.exitCode!==null,()=>supervisor.output());
     assert.equal(await supervisor.done,1);
     assert.match(supervisor.output(),/本地数据库迁移失败，服务未启动/);
     assert.equal(await read(),null);
-    await rm(join(migrations,'0007_invalid.sql'));
+    await rm(join(migrations,'0008_invalid.sql'));
     supervisor=start();
     await until(async()=>(await read())?.history?.length===1,()=>supervisor.output());
     assert.equal((await read()).participant.name,'迁移回归演示');
     assert.match(await run(['d1','execute','DB','--local','--command','SELECT value FROM local_migration_probe;']),/applied/);
     // Changing an already applied migration cannot be silently ignored by Wrangler.
-    await writeFile(join(migrations,'0006_local_probe.sql'),'CREATE TABLE changed_probe (value TEXT);');
+    await writeFile(join(migrations,'0007_local_probe.sql'),'CREATE TABLE changed_probe (value TEXT);');
     await until(()=>supervisor.child.exitCode!==null,()=>supervisor.output());
     assert.equal(await supervisor.done,1);assert.match(supervisor.output(),/已有迁移被修改或删除/);
     assert.equal(await read(),null);
