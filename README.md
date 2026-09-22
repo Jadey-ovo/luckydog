@@ -44,13 +44,13 @@
 
 桌面应用会自动检查 GitHub Release。新版本下载完成后会提示重启安装；如果系统限制自动替换，则会引导到官方下载页。
 
-| 你的电脑 | v1.3.0 安装包 | 打开方式 |
+| 你的电脑 | v1.3.1 安装包 | 打开方式 |
 | --- | --- | --- |
-| Windows 10 / 11，64 位 x64 | [下载 EXE](https://github.com/Jadey-ovo/luckydog/releases/download/v1.3.0/Luckydog-1.3.0-win-x64.exe) | 双击，按安装向导操作 |
-| Mac，Apple 芯片 M 系列 | [下载 DMG](https://github.com/Jadey-ovo/luckydog/releases/download/v1.3.0/Luckydog-1.3.0-mac-arm64.dmg) | 打开后拖入「应用程序」 |
-| Mac，Intel 芯片 | [下载 DMG](https://github.com/Jadey-ovo/luckydog/releases/download/v1.3.0/Luckydog-1.3.0-mac-x64.dmg) | 打开后拖入「应用程序」 |
+| Windows 10 / 11，64 位 x64 | [下载 EXE](https://github.com/Jadey-ovo/luckydog/releases/download/v1.3.1/Luckydog-1.3.1-win-x64.exe) | 双击，按安装向导操作 |
+| Mac，Apple 芯片 M 系列 | [下载 DMG](https://github.com/Jadey-ovo/luckydog/releases/download/v1.3.1/Luckydog-1.3.1-mac-arm64.dmg) | 打开后拖入「应用程序」 |
+| Mac，Intel 芯片 | [下载 DMG](https://github.com/Jadey-ovo/luckydog/releases/download/v1.3.1/Luckydog-1.3.1-mac-x64.dmg) | 打开后拖入「应用程序」 |
 
-[全部版本与更新说明](https://github.com/Jadey-ovo/luckydog/releases) · [下载文件校验值](https://github.com/Jadey-ovo/luckydog/releases/download/v1.3.0/SHA256SUMS.txt)
+[全部版本与更新说明](https://github.com/Jadey-ovo/luckydog/releases) · [下载文件校验值](https://github.com/Jadey-ovo/luckydog/releases/download/v1.3.1/SHA256SUMS.txt)
 
 目前的安装包未做开发者签名及 Apple 公证，系统可能提示未知开发者或阻止打开。受管理的公司电脑可能限制运行，可以先用网页版。Mac 两种架构已在 Apple 芯片机器上启动验证，其中 Intel 版通过兼容运行验证；Windows 安装包已构建，尚未在 Windows 实机验证。
 
