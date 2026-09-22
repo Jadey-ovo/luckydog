@@ -204,5 +204,10 @@ export default function Entry() {
  const [hash,setHash]=useState(location.hash);
  useEffect(()=>{const update=()=>setHash(location.hash);window.addEventListener('hashchange',update);return()=>window.removeEventListener('hashchange',update);},[]);
  const match=/^#(join|result)=([a-f0-9]{48})$/.exec(hash);
+ useEffect(()=>{
+  document.title=match
+   ?(match[1]==='join'?'活动报名｜Luckydog 幸运抽奖':'中奖结果｜Luckydog 幸运抽奖')
+   :'Luckydog 幸运抽奖｜扫码报名与随机抽奖';
+ },[hash]);
  return match ? <SharedPage key={hash} kind={match[1]} id={match[2]}/> : <App/>;
 }

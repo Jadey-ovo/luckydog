@@ -20,6 +20,19 @@ const databaseErrors = {
   NAME_DUPLICATE: ['此用户名已参与，请使用其他用户名', 409],
   ROOM_FULL: ['参与人数已满', 400],
 };
+const requestDescription = (request, url) => {
+  const [, , kind, id, action] = url.pathname.split('/');
+  if (kind === 'rooms' && !id && request.method === 'POST') return '创建扫码报名活动';
+  if (kind === 'rooms' && id && action === 'join' && request.method === 'POST') return '扫码报名并提交用户名';
+  if (kind === 'rooms' && id && request.method === 'GET') return '读取活动状态或发起人报名名单';
+  if (kind === 'rooms' && id && request.method === 'PATCH') return '更新报名状态、参与名单或开奖结果';
+  if (kind === 'rooms' && id && request.method === 'DELETE') return '结束当前抽奖活动';
+  if (kind === 'results' && !id && request.method === 'POST') return '生成中奖结果分享链接';
+  if (kind === 'results' && id && request.method === 'GET') return '查看分享的中奖结果';
+  if (kind === 'results' && id && request.method === 'PATCH') return '保持中奖结果分享有效';
+  if (kind === 'results' && id && request.method === 'DELETE') return '结束中奖结果分享';
+  return 'Luckydog 后台接口请求';
+};
 async function readBody(request) {
   if (request.method === 'GET') return {};
   if (request.headers.get('content-type') !== 'application/json') fail('仅接受 JSON 请求', 415);
@@ -52,7 +65,9 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
-    const headers = new Headers({ 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    const headers = new Headers({ 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store',
+      'X-Luckydog-Request-Description': encodeURIComponent(requestDescription(request, url)),
+      'X-Luckydog-Request-Description-Encoding': 'percent-encoded-utf-8' });
     const send = (status, value) => new Response(JSON.stringify(value), { status, headers });
     try {
       const body = await readBody(request);

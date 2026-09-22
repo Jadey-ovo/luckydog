@@ -133,6 +133,15 @@ test('Worker serves API JSON and static assets',async({request})=>{
  const page=await request.get('/');expect(page.status()).toBe(200);expect(page.headers()['content-type']).toContain('text/html');
 });
 
+test('page titles distinguish the draw, registration and result views',async({page})=>{
+ await page.goto('./');await expect(page).toHaveTitle('Luckydog 幸运抽奖｜扫码报名与随机抽奖');
+ await page.route('**/api/rooms/*',route=>route.fulfill({status:404,json:{error:'gone'}}));
+ await page.goto(`./#join=${'a'.repeat(48)}`);await expect(page).toHaveTitle('活动报名｜Luckydog 幸运抽奖');
+ await page.unroute('**/api/rooms/*');
+ await page.route('**/api/results/*',route=>route.fulfill({status:404,json:{error:'gone'}}));
+ await page.goto(`./#result=${'b'.repeat(48)}`);await expect(page).toHaveTitle('中奖结果｜Luckydog 幸运抽奖');
+});
+
 test('wide layout fills the viewport and closing the host preserves its invitation',async({page,request})=>{
  await page.setViewportSize({width:1920,height:1080});const url=await createInvite(page);
  const workspace=await page.locator('.workspace').boundingBox();expect(workspace!.x).toBeLessThanOrEqual(1);expect(workspace!.width).toBeGreaterThanOrEqual(1919);

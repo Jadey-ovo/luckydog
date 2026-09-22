@@ -28,6 +28,7 @@ async function api(path, method = 'GET', body, headers = {}) {
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   assert.match(response.headers.get('cache-control'), /no-store/);
+  assert.ok(response.headers.get('x-luckydog-request-description'));
   return { status: response.status, value: await response.json(), headers: response.headers };
 }
 const create = async (durationMinutes = 5) => (await api('rooms', 'POST', { durationMinutes })).value;
@@ -65,6 +66,15 @@ test('room protocol, duration, public privacy, authorization and archive retenti
   assert.equal((await api('rooms', 'POST', { durationMinutes: 1 })).status, 400);
   const start = Date.now(), room = (await api('rooms', 'POST', {})).value;
   assert.ok(room.joinExpires >= start + 300000 && room.joinExpires < Date.now() + 300100);
+});
+
+test('API responses explain background requests in Chinese', async () => {
+  const created = await api('rooms', 'POST', { durationMinutes: 5 });
+  assert.equal(decodeURIComponent(created.headers.get('x-luckydog-request-description')), '创建扫码报名活动');
+  const status = await api(`rooms/${created.value.id}`);
+  assert.equal(decodeURIComponent(status.headers.get('x-luckydog-request-description')), '读取活动状态或发起人报名名单');
+  const joined = await api(`rooms/${created.value.id}/join`, 'POST', { name: '说明测试' }, cookie(909));
+  assert.equal(decodeURIComponent(joined.headers.get('x-luckydog-request-description')), '扫码报名并提交用户名');
 });
 
 test('concurrent same-name and same-browser registrations have exactly one winner', async () => {

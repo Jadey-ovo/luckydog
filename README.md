@@ -86,6 +86,6 @@ npm run test:desktop
 
 `npm run build` 类型检查并生成静态页面；`npm run build:sites` 生成本地 Sites 产物，不部署。`LUCKYDOG_TEST_SITES=1 npm run test:worker` 验证打包后的 Sites 入口与 Drizzle 迁移。两套迁移必须追加同步，已发布迁移不可改写。
 
-详见 [开发说明](docs/DEVELOPMENT.md)、[本次验证记录](docs/ACTIVITY-HISTORY-24H.md) 与 [发布说明](docs/RELEASING.md)。推送 GitHub 分支不会更新 Sites。当前更新需要用户明确确认后才可合并、部署 Sites、创建标签、构建安装包或发布 Release。
+详见 [开发说明](docs/DEVELOPMENT.md)、[活动记录设计](docs/ACTIVITY-HISTORY-24H.md)、[访问统计中文对照](docs/analytics-request-map.md) 与 [发布说明](docs/RELEASING.md)。推送 GitHub 分支不会自动更新 Sites。
 
 发现问题请 [提 Issue](https://github.com/Jadey-ovo/luckydog/issues)，使用虚构名单，勿提交真实个人信息。
