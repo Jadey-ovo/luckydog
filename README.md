@@ -2,7 +2,7 @@
   <img src="build/icon.png" width="96" alt="Luckydog 奖杯图标">
   <h1>Luckydog 🐾</h1>
   <p><strong>今天谁是幸运儿？点一下就知道。</strong></p>
-  <p>Sites 在线邀请报名与个人结果查询 · Windows / Mac 离线抽奖</p>
+  <p>Sites 与 Windows / Mac 桌面版均支持扫码报名、抽奖和个人结果查询</p>
   <p><a href="https://luckydog-draw.jadey-owo.chatgpt.site/">🎲 Sites 在线版</a> · <a href="https://github.com/Jadey-ovo/luckydog/releases/latest">📦 下载桌面版</a> · <a href="public/privacy.html">🔒 隐私说明</a></p>
 </div>
 
@@ -16,7 +16,7 @@
 2. 实时查看名单，到期自动截止；提前截止、移除参与者都需要确认。原截止时间前可以继续报名。
 3. 确认名单与名额后抽奖。参与者使用报名时的浏览器打开原链接，中奖显示“恭喜你中奖啦”，未中奖得到明确反馈，未参与者只看到活动已结束。
 
-同一轮不重复中奖。“继续抽奖”会从完整名单重新抽取，可能重复上一轮中奖者，原链接突出显示最近一次成功同步的结果，并保留本人每轮中奖或未中奖记录。同步失败会提示重试。桌面版支持手动输入，名单只在本机保存。
+同一轮不重复中奖。“继续抽奖”会从完整名单重新抽取，可能重复上一轮中奖者，原链接突出显示最近一次成功同步的结果，并保留本人每轮中奖或未中奖记录。同步失败会提示重试。网页和桌面版使用相同的邀请流程。
 
 <img src="docs/participant-result.png" width="300" alt="移动端本人中奖结果，虚构用户名演示小鹿">
 
@@ -40,17 +40,17 @@
 
 **[打开 Sites 在线版](https://luckydog-draw.jadey-owo.chatgpt.site/)**，无需注册，无需安装。
 
-桌面版自带运行环境，装好后可以完全离线使用。
+桌面版自带运行环境。抽奖界面和抽奖计算在本机运行；创建扫码邀请时需要联网，并通过 Sites 临时同步报名名单与开奖结果。
 
 桌面应用会自动检查 GitHub Release。新版本下载完成后会提示重启安装；如果系统限制自动替换，则会引导到官方下载页。
 
-| 你的电脑 | v1.3.1 安装包 | 打开方式 |
+| 你的电脑 | v1.4.0 安装包 | 打开方式 |
 | --- | --- | --- |
-| Windows 10 / 11，64 位 x64 | [下载 EXE](https://github.com/Jadey-ovo/luckydog/releases/download/v1.3.1/Luckydog-1.3.1-win-x64.exe) | 双击，按安装向导操作 |
-| Mac，Apple 芯片 M 系列 | [下载 DMG](https://github.com/Jadey-ovo/luckydog/releases/download/v1.3.1/Luckydog-1.3.1-mac-arm64.dmg) | 打开后拖入「应用程序」 |
-| Mac，Intel 芯片 | [下载 DMG](https://github.com/Jadey-ovo/luckydog/releases/download/v1.3.1/Luckydog-1.3.1-mac-x64.dmg) | 打开后拖入「应用程序」 |
+| Windows 10 / 11，64 位 x64 | [下载 EXE](https://github.com/Jadey-ovo/luckydog/releases/download/v1.4.0/Luckydog-1.4.0-win-x64.exe) | 双击，按安装向导操作 |
+| Mac，Apple 芯片 M 系列 | [下载 DMG](https://github.com/Jadey-ovo/luckydog/releases/download/v1.4.0/Luckydog-1.4.0-mac-arm64.dmg) | 打开后拖入「应用程序」 |
+| Mac，Intel 芯片 | [下载 DMG](https://github.com/Jadey-ovo/luckydog/releases/download/v1.4.0/Luckydog-1.4.0-mac-x64.dmg) | 打开后拖入「应用程序」 |
 
-[全部版本与更新说明](https://github.com/Jadey-ovo/luckydog/releases) · [下载文件校验值](https://github.com/Jadey-ovo/luckydog/releases/download/v1.3.1/SHA256SUMS.txt)
+[全部版本与更新说明](https://github.com/Jadey-ovo/luckydog/releases) · [下载文件校验值](https://github.com/Jadey-ovo/luckydog/releases/download/v1.4.0/SHA256SUMS.txt)
 
 目前的安装包未做开发者签名及 Apple 公证，系统可能提示未知开发者或阻止打开。受管理的公司电脑可能限制运行，可以先用网页版。Mac 两种架构已在 Apple 芯片机器上启动验证，其中 Intel 版通过兼容运行验证；Windows 安装包已构建，尚未在 Windows 实机验证。
 
@@ -60,7 +60,7 @@
 
 Sites 不配置定时清理任务，过期数据在后续 API 请求时自动清理（每个运行实例最多每小时触发一次）；无请求期间可能仍物理存储，但 API 始终禁止访问过期记录。独立 Worker 通过每小时定时任务清理。平台备份、恢复历史、访问 IP 与请求日志由托管方另行管理，不等同于应用记录删除。
 
-桌面版完全离线抽奖，用本机 localStorage 保存名单，不上传用户名或结果，共用电脑请用完清空。自动更新仅访问 GitHub 安装包。应用没有广告、埋点或统计 SDK。详见 [隐私说明](public/privacy.html)。
+桌面版的界面与随机抽取在本机运行。用户主动创建在线邀请后，桌面程序只允许连接固定的 Luckydog Sites 接口，并临时同步报名用户名、匿名参与者标识和每轮结果；这些数据遵循相同的 24 小时查询期限。桌面网页本身仍不能访问任意网络地址。自动更新访问 GitHub 安装包。应用没有广告、埋点或统计 SDK。详见 [隐私说明](public/privacy.html)。
 
 兼容旧版的独立 `/api/results` 主动公开分享接口仍采用约 90 秒在线租约，关闭后失效；它不是邀请活动的个人查询接口，当前在线邀请流程不会使用它。
 

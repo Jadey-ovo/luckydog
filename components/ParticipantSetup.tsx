@@ -4,7 +4,6 @@ import type { Participant } from '../types';
 import { api, shareUrl } from '../services/sharing';
 import { ShareLink } from './ShareLink';
 import { Toast } from './Toast';
-import { importParticipants } from '../services/participants';
 
 export type ActiveRoom = {id:string;owner:string;joinExpires:number;expires?:number;state?:'open'|'closed'|'drawn'|'interrupted'|'ended';open?:boolean};
 type Room = ActiveRoom;
@@ -24,7 +23,6 @@ export function ParticipantSetup({participants,setParticipants,locked,onReady,on
  const [error,setError]=useState('');
  const [cutoffConfirm,setCutoffConfirm]=useState(false);
  const [removeCandidate,setRemoveCandidate]=useState<Participant|null>(null);
- const [manualText,setManualText]=useState('');
  const polling=useRef(true);
  const lastPollError=useRef('');
  const unavailable=room?.state==='interrupted'||room?.state==='ended'||Boolean(room?.expires&&now>=room.expires);
@@ -76,15 +74,14 @@ export function ParticipantSetup({participants,setParticipants,locked,onReady,on
    <div className="roster-heading"><strong>已确认 {participants.length} 位参与者</strong><button className="back-button" disabled={locked} onClick={()=>{setStep('roster');onReset();}}><ChevronLeft size={15} aria-hidden="true"/>返回</button></div>
    {children}
   </>:step==='add'? <>
-   {isDesktop&&<div className="invite-mode-label"><span>名单输入</span><small>每行填写一个用户名</small></div>}
    <div className="method-content invite-only-content">
-    {isDesktop?<div className="names-block"><textarea aria-label="参与名单" placeholder={'张三\n李四'} value={manualText} onChange={event=>setManualText(event.target.value)}/></div>:<div className="invite-box">{room?<>
+    <div className="invite-box">{room?<>
       <div className={`registration-status ${registrationOpen?'is-open':'is-closed'}`}><Clock3 size={15}/><span>{unavailable?'活动已中断或过期':registrationOpen?'报名进行中':'报名已截止'}</span><b>{registrationOpen?countdown(room.joinExpires-now):new Date(room.joinExpires).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})}</b></div>
       <ShareLink url={shareUrl('join',room.id)} validity="" onCopied={()=>setSuccess('邀请链接复制成功')} onError={setError}/>
      </>:<><strong>邀请朋友参与抽奖</strong><ol><li>选择报名时长，生成二维码与链接。</li><li>参与者提交用户名后，名单会实时出现。</li><li>到期自动截止，也可以随时提前截止。</li></ol><fieldset className="invite-duration"><legend>报名时长</legend><div>{[5,10,30].map(minutes=><button type="button" key={minutes} aria-pressed={duration===minutes} onClick={()=>setDuration(minutes)}>{minutes} 分钟</button>)}</div></fieldset></>}
-    </div>}
+    </div>
    </div>
-   <div className="flow-footer">{isDesktop?<button className="import-button" disabled={!manualText.trim()} onClick={()=>{const names=importParticipants(manualText,[]);setParticipants(names);setManualText('');setStep('roster');onReset();}}>确认名单</button>:room?
+   <div className="flow-footer">{room?
     <button className="import-button" disabled={busy||unavailable} onClick={()=>registrationOpen?setCutoffConfirm(true):void finishInvite()}>{registrationOpen?'截止报名':'查看报名名单'}</button>:
     <button className="import-button" disabled={busy} onClick={()=>void run(async()=>{const value=await api<Room>('rooms','POST',{durationMinutes:duration});polling.current=true;setParticipants([]);setNow(Date.now());setRoom({...value,open:true});})}>{busy?'正在创建…':'创建抽奖邀请'}</button>}
    </div>

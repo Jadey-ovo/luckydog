@@ -50,14 +50,14 @@ const App: React.FC = () => {
   }, [resultShare]);
 
   useEffect(() => {
-    if (!currentResult || !activeRoom || isDesktop || publishedRoomResult.current === currentResult.timestamp) return;
+    if (!currentResult || !activeRoom || publishedRoomResult.current === currentResult.timestamp) return;
     publishedRoomResult.current = currentResult.timestamp;
     setSharing(true); setShareError('');
     void api(`rooms/${activeRoom.id}`, 'PATCH', { result: currentResult }, activeRoom.owner)
       .then(() => { setSyncedResult(currentResult.timestamp); setResultUrl(shareUrl('join', activeRoom.id)); })
       .catch(error => { publishedRoomResult.current = 0; setShareError((error as Error).message); })
       .finally(() => setSharing(false));
-  }, [currentResult, activeRoom?.id, activeRoom?.owner, isDesktop, syncRetry]);
+  }, [currentResult, activeRoom?.id, activeRoom?.owner, syncRetry]);
 
   const helperText = useMemo(() => {
     if (!ready) return '把好运留给这一刻';
@@ -106,10 +106,10 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      {!isDesktop && privacyVisible && (
+      {privacyVisible && (
         <div className="privacy-banner" role="status">
           <ShieldCheck size={16} />
-          <span className="privacy-summary">数据仅用于报名与抽奖，创建满 24 小时后停止查询并自动清理。
+          <span className="privacy-summary">{isDesktop?'桌面抽奖保存在本机；创建在线邀请后，报名与结果数据由 Sites 临时托管。':'数据仅用于报名与抽奖，创建满 24 小时后停止查询并自动清理。'}
             <span className="info-bubble privacy-info"><button aria-label="查看信息安全说明" aria-describedby="privacy-details"><Info size={15}/></button><span id="privacy-details" role="tooltip">名单由 Sites 临时托管，参与者仅可查看本人记录；过期清理及平台日志、备份规则详见隐私说明。</span></span>
           </span>
           <a href="./privacy.html" target="_blank" rel="noopener noreferrer">隐私说明</a>
@@ -185,7 +185,7 @@ const App: React.FC = () => {
               <div className="result-actions">
                 <button className="primary" disabled={sharing||Boolean(activeRoom&&syncedResult!==currentResult.timestamp)} onClick={()=>setResultAction('continue')}><RotateCcw size={16} aria-hidden="true"/>继续抽奖</button>
                 <button disabled={sharing} onClick={()=>setResultAction('clear')}><Trash2 size={16} aria-hidden="true"/>清空返回</button>
-                {!isDesktop && <button onClick={() => setShareOpen(true)}><Share2 size={17} />{activeRoom?'查看活动二维码':'分享抽奖结果'}</button>}
+                <button onClick={() => setShareOpen(true)}><Share2 size={17} />{activeRoom?'查看活动二维码':'分享抽奖结果'}</button>
               </div>
             </div>
           )}
@@ -194,7 +194,7 @@ const App: React.FC = () => {
       {activeRoom && currentResult && syncedResult!==currentResult.timestamp && <p role="status">{sharing?'正在同步本人开奖结果…':<>开奖结果尚未同步，参与者暂时无法查询本轮结果。<button onClick={()=>{publishedRoomResult.current=0;setSyncRetry(value=>value+1);}}>重试同步开奖结果</button></>}</p>}
       <Toast message={shareError} onClose={()=>setShareError('')}/>
       {resultAction==='continue'&&<div className="modal-backdrop"><div className="dialog" role="dialog" aria-modal="true" aria-labelledby="continue-draw-title"><button className="dialog-close" aria-label="关闭弹窗" onClick={()=>setResultAction(null)}><X size={18}/></button><h2 id="continue-draw-title">继续使用当前名单抽奖</h2><p>当前参与名单会完整保留。下一轮会从整个名单重新随机抽取，因此可能与上一轮的中奖者重复；活动链接会展示最新结果，并保留每轮本人的抽奖记录。</p><div className="dialog-actions"><button onClick={()=>setResultAction(null)}>取消</button><button autoFocus className="primary" onClick={continueDraw}>确认继续抽奖</button></div></div></div>}
-      {resultAction==='clear'&&<div className="modal-backdrop"><div className="dialog danger-dialog" role="dialog" aria-modal="true" aria-labelledby="clear-activity-title"><button className="dialog-close" aria-label="关闭弹窗" disabled={sharing} onClick={()=>setResultAction(null)}><X size={18}/></button><h2 id="clear-activity-title">返回重新发起</h2><p>{isDesktop?'确认后清空本机名单与当前配置，返回新的抽奖起点。此操作无法撤销。':'确认后结束当前活动并清空本页配置。历史报名与每轮抽奖记录不会删除，原链接和二维码仍可查询至创建后 24 小时。重新发起将生成新的链接和二维码，无法恢复本次活动的管理。'}</p><div className="dialog-actions"><button disabled={sharing} onClick={()=>setResultAction(null)}>保留本次活动</button><button autoFocus className="danger" disabled={sharing} onClick={()=>void clearActivity()}>{sharing?'正在清空…':'确认清空并返回'}</button></div></div></div>}
+      {resultAction==='clear'&&<div className="modal-backdrop"><div className="dialog danger-dialog" role="dialog" aria-modal="true" aria-labelledby="clear-activity-title"><button className="dialog-close" aria-label="关闭弹窗" disabled={sharing} onClick={()=>setResultAction(null)}><X size={18}/></button><h2 id="clear-activity-title">返回重新发起</h2><p>{activeRoom?'确认后结束当前活动并清空本机配置。历史报名与每轮抽奖记录不会删除，原链接和二维码仍可查询至创建后 24 小时。重新发起将生成新的链接和二维码，无法恢复本次活动的管理。':'确认后清空本机名单与当前配置，返回新的抽奖起点。此操作无法撤销。'}</p><div className="dialog-actions"><button disabled={sharing} onClick={()=>setResultAction(null)}>保留本次活动</button><button autoFocus className="danger" disabled={sharing} onClick={()=>void clearActivity()}>{sharing?'正在清空…':'确认清空并返回'}</button></div></div></div>}
       {shareOpen && <div className="modal-backdrop"><div className="dialog" role="dialog" aria-modal="true" aria-labelledby="share-title"><button className="dialog-close" aria-label="关闭弹窗" disabled={sharing} onClick={()=>setShareOpen(false)}><X size={18}/></button><h2 id="share-title">{activeRoom?'活动二维码':'分享抽奖结果'}</h2>{activeRoom?<>{resultUrl?<ShareLink url={resultUrl} validity="原链接仅显示本人结果 · 活动创建后 24 小时内有效"/>:<p>正在把开奖结果同步到原活动链接…</p>}</>:resultUrl ? <ShareLink url={resultUrl} validity="关闭发起页面后，此链接将失效"/> : <><p>生成链接后，中奖用户名与抽奖时间会临时上传。关闭发起页面后，分享链接随即失效。</p><button autoFocus disabled={sharing} onClick={publishResult}>{sharing ? '正在生成…':'生成分享链接'}</button></>}</div></div>}
     </div>
   );

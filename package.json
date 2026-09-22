@@ -1,7 +1,7 @@
 {
   "name": "luckydog",
   "private": true,
-  "version": "1.3.1",
+  "version": "1.4.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -51,7 +51,7 @@
     "vitest": "^4.1.11",
     "wrangler": "^4.135.0"
   },
-  "description": "Sites 在线邀请报名、24 小时个人结果查询与 Windows / Mac 离线抽奖",
+  "description": "Sites 与 Windows / Mac 桌面版扫码报名、随机抽奖和 24 小时个人结果查询",
   "author": "Aimall",
   "main": "electron/main.cjs",
   "homepage": "https://luckydog-draw.jadey-owo.chatgpt.site/",
