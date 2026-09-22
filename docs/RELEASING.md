@@ -3,26 +3,26 @@
 ## 项目入口
 
 - 源代码 `https://github.com/Jadey-ovo/luckydog`
-- 网页试用 `https://jadey-ovo.github.io/luckydog/`
+- 网页试用 `https://luckydog-draw.jadey-owo.chatgpt.site/`
 - 最新发布 `https://github.com/Jadey-ovo/luckydog/releases/latest`
 
 安装包上传到 GitHub Releases，不提交到 Git 仓库。`release/` 只用于本机构建输出。
 
-## 网页发布
+## Sites 发布
 
-仓库的 Settings → Pages → Source 选择 GitHub Actions。推送 `main` 后，`pages.yml` 运行测试并发布 `dist/`。网页只有静态文件，没有数据库配置、服务端环境变量或密钥。
+Sites 使用 `.openai/hosting.json` 中的项目 ID 和 D1 绑定。发布前运行完整测试、生成 Sites 构建产物并应用新增数据库迁移，再由 Sites 工作流保存版本和部署。仓库中的 GitHub Pages 仅作静态兼容预览，不提供在线报名后端。
 
 ## 下一次桌面发布
 
 1. 修改 `package.json` 版本，并执行 `npm install --package-lock-only --ignore-scripts` 同步锁文件。
 2. 更新 README 的安装包版本和链接，提交改动。
-3. 创建对应的版本标签，例如 `v1.2.0`，并推送。
+3. 创建对应的版本标签，例如 `v1.3.0`，并推送。
 4. 等待 Desktop installers 工作流，在 Windows 与 macOS 原生环境构建。
 5. 打开草稿 Release，核对所有附件、校验值和更新说明，实机测试后发布。
 
 ```sh
-git tag v1.2.0
-git push origin v1.2.0
+git tag v1.3.0
+git push origin v1.3.0
 ```
 
 手动运行工作流只生成构建附件，不创建 Release。标签触发时会检查标签与包版本一致，全部构建成功后才创建草稿。
