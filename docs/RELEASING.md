@@ -10,7 +10,7 @@
 
 ## Sites 发布
 
-Sites 使用 `.openai/hosting.json` 中的项目 ID 和 D1 绑定。发布前运行完整测试、生成 Sites 构建产物并应用新增数据库迁移，再由 Sites 工作流保存版本和部署。仓库中的 GitHub Pages 仅作静态兼容预览，不提供在线报名后端。
+Sites 使用 `.openai/hosting.json` 中的项目 ID 和 D1 绑定。发布前运行完整测试、生成 Sites 构建产物并应用新增数据库迁移，再由 Sites 工作流保存版本和部署。仓库不再自动部署 Cloudflare 或 GitHub Pages，网页生产入口统一使用 Sites。
 
 ## 下一次桌面发布
 
