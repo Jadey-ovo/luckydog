@@ -78,12 +78,13 @@ Sites 不配置定时清理任务，过期数据在后续 API 请求时自动清
 npm ci
 npm test
 npm run test:worker
+npm run test:dev
 npx playwright install chromium
 npm run test:web
 npm run test:desktop
 ```
 
-`npm run dev:worker` 构建页面、迁移本地 D1 并启动完整网站。`npm run dev` 仅启动前端，接口需另开 Worker。测试使用隔离数据库与虚构名单，不访问线上数据。桌面测试只启动开发 Electron，不生成安装包。
+`npm run dev:worker` 构建页面、迁移本地 D1 并启动完整网站；运行中新增 SQL 迁移会先停止服务，应用成功后自动重启。迁移失败或已有迁移被修改时会停止并提示修复，不重置本地数据。`npm run dev` 仅启动前端，接口需另开 Worker。测试使用隔离数据库与虚构名单，不访问线上数据。桌面测试只启动开发 Electron，不生成安装包。
 
 `npm run build` 类型检查并生成静态页面；`npm run build:sites` 生成本地 Sites 产物，不部署。`LUCKYDOG_TEST_SITES=1 npm run test:worker` 验证打包后的 Sites 入口与 Drizzle 迁移。两套迁移必须追加同步，已发布迁移不可改写。
 

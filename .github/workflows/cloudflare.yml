@@ -24,6 +24,7 @@ jobs:
           ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
       - run: npm test
       - run: npm run test:worker
+      - run: npm run test:dev
       - run: npx playwright install --with-deps chromium
       - run: npm run test:web
   deploy:

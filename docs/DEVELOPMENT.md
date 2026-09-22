@@ -14,6 +14,7 @@ Luckydog 使用同一套 React 界面提供网页和桌面体验。Vite 生成�
 | `electron/main.cjs` | 窗口、菜单、单实例、进程安全边界 |
 | `electron-builder.yml` | 安装包白名单和多平台目标 |
 | `public/privacy.html` | 静态隐私说明 |
+| `scripts/dev-worker.mjs` | 本地数据库迁移、服务启动与新增迁移自动重启 |
 | `tests/` | 核心逻辑、桌面、浏览器隐私测试 |
 
 ## 网页与报名数据
@@ -42,6 +43,7 @@ Sites 入口按 API 流量触发 prune，每个运行实例最多每小时一次
 npm ci
 npm test
 npm run test:worker
+npm run test:dev
 npm run build
 npx playwright install chromium
 npm run test:web
@@ -59,3 +61,15 @@ Windows 推荐在 Windows 上构建。macOS 在 Mac 上构建。当前安装包�
 参与页采用统一身份卡，报名说明仅在未报名且报名开放时显示。有效期单独放在页底；失效状态无跳转入口。首次加载、网络错误和 404 分离；404 后不再轮询，避免旧链接持续请求。发起页在矮窗口允许页面滚动；320/768/1024/1440 宽度覆盖实际抽奖与重置流程。
 
 仅验证 Sites 源入口与 Drizzle 迁移、而不生成 Sites 打包产物时，运行 `LUCKYDOG_TEST_SITES=source npm run test:worker`。
+
+## 本地开发与新增迁移
+
+使用 `npm run dev:worker` 或 `npm run server` 启动完整网站。启动管理脚本固定使用本地 D1，并让迁移命令和 Worker 使用同一 `.wrangler/state` 目录；迁移成功前不启动 API。新增 `migrations/*.sql` 后会自动停止 Worker、执行迁移并重启，避免新版 Worker 访问旧表结构。
+
+迁移失败时服务保持停止，终端提示修复并重新运行 `npm run dev:worker`。不要删除 `.wrangler/state` 作为常规修复方式，那里保留本地活动。运行期间修改或删除已存在迁移会停止服务并报错；应恢复旧文件，使用追加迁移修正结构。前端资源仍在启动时构建，页面开发可配合 Vite。
+
+旧的、直接启动的 `wrangler dev` 进程没有上述监测能力。首次切换到此脚本时，请先在旧进程终端按 Ctrl+C，再运行 `npm run dev:worker`。单独运行 `npm run db:migrate:local` 只迁移数据库，不负责重启服务；不要把旧服务仍在运行误认为新流程已接管。
+
+`npm run test:dev` 使用临时配置、独立数据库目录和随机端口，通过实际 Wrangler 验证：仅有 0004 的数据库升级到 0005 后可查询旧活动与历史；运行中新增迁移后自动重启；迁移失败停止服务；修复后重启保留原数据；修改已执行迁移会明确报错。测试不访问生产数据库，也不生成安装包。
+
+测试或独立本地环境可通过 `LUCKYDOG_DEV_CONFIG`、`LUCKYDOG_DEV_STATE`、`LUCKYDOG_DEV_PORT` 指定配置文件、数据目录和端口。脚本只传入 `--local`，不支持远程迁移。
