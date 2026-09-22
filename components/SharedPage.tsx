@@ -57,17 +57,19 @@ export function SharedPage({kind,id}:{kind:string;id:string}) {
   content=<section className="guest-card"><div className="guest-state-icon muted"><CircleSlash/></div><h1>活动已失效</h1><p className="guest-description">活动查询已结束，相关记录已不可访问。</p></section>;
  }else if(error&&!room&&!result){
   content=<section className="guest-card"><div className="guest-state-icon muted"><WifiOff/></div><h1>暂时无法读取活动</h1><p className="guest-description" role="alert">{error}</p><button className="import-button" onClick={()=>{setLoading(true);setRetry(value=>value+1);}}>重试</button></section>;
- }else if(room?.state==='drawn'){
+ }else if(room?.state==='drawn'||(room?.state==='ended'&&Boolean(room.history?.length))){
   const latest=room.personalResult;
   const won=Boolean(latest?.won);
+  const ended=room.state==='ended';
   content=<section className={`guest-card ${self&&won?'guest-winner':''}`}>
    <div className={`guest-state-icon ${self&&won?'gold':'muted'}`}>{self&&won?<Trophy/>:<Sparkles/>}</div>
+   <span className={`guest-round ${ended?'ended':''}`}>{ended?'活动已结束':'活动仍在进行 · 已开奖'}</span>
    {self&&latest&&<span className="guest-round">第 {latest.round} 轮 · 最新结果</span>}
    <h1>{self?(won?'恭喜你中奖啦':'本轮未中奖'):'活动已结束'}</h1>
-   {self?<><p className="guest-description">{won?'这一刻，好运属于你。':'感谢参与，期待下一份好运。'}</p><GuestIdentity name={self.name}/>
+   {self?<><p className="guest-description">{ended?(won?'本次活动已结束，请查看你的历轮结果。':'本次活动已结束，感谢你的参与。'):'发起人可能继续抽奖，本页会自动更新后续轮次。'}</p><GuestIdentity name={self.name}/>
     {latest&&<p className="guest-caption">开奖于 {time(latest.timestamp)}</p>}
     {Boolean(room.history?.length)&&<section className="guest-history" aria-label="我的抽奖记录"><div className="guest-history-heading"><h2>我的抽奖记录</h2><span>{room.history!.length} 轮</span></div><ol>{[...room.history!].reverse().map(draw=><li key={draw.round}><div><strong>第 {draw.round} 轮</strong><time dateTime={new Date(draw.timestamp).toISOString()}>{time(draw.timestamp)}</time></div><span className={`guest-outcome ${draw.won?'won':''}`}>{draw.won?'中奖':'未中奖'}</span></li>)}</ol></section>}
-   </>:<p className="guest-description">本次活动已完成开奖。</p>}
+   </>:<p className="guest-description">{ended?'本次活动已结束。':'活动已经开奖，发起人可能继续进行下一轮。'}</p>}
   </section>;
  }else if(room){
   const interrupted=room.state==='interrupted';
@@ -77,7 +79,7 @@ export function SharedPage({kind,id}:{kind:string;id:string}) {
   content=<section className="guest-card">
    {(!self||closed)&&<div className={`guest-state-icon ${ended||interrupted?'muted':''}`}>{ended||interrupted?<CircleSlash/>:<Clock3/>}</div>}
    <h1>{title}</h1>
-   {ended?<p className="guest-description">本次活动已结束，未进行开奖。</p>:interrupted?<p className="guest-description">本次活动未完成开奖，请联系发起人。</p>:closed?<p className="guest-description">{self?'请等待发起人公布抽奖结果。':'本次报名已截止，暂未开奖。'}</p>:null}
+   {ended?<p className="guest-description">本次活动已结束。</p>:interrupted?<p className="guest-description">本次活动未完成开奖，请联系发起人。</p>:closed?<p className="guest-description">{self?'请等待发起人公布抽奖结果。':'本次报名已截止，暂未开奖。'}</p>:null}
    {self&&<GuestIdentity name={self.name}/>}
    {registrationOpen&&(self?<p className="guest-caption">本页会在开奖后自动显示本人结果。</p>:<>
     <p className="guest-description">填写用户名，给自己一份好运。</p>

@@ -72,7 +72,8 @@ export default {
       if (kind === 'rooms' && id) {
         const room = await db.prepare(`SELECT * FROM rooms WHERE id = ? AND expires > ${SQL_NOW}`).bind(id).first();
         if (!room) fail('邀请已过期或不存在', 404);
-        const interrupted = !room.archived && !room.result_winners && room.active_until !== null && room.active_until <= Date.now();
+        const hostGone = !room.archived && room.active_until !== null && room.active_until <= Date.now();
+        const interrupted = hostGone && !room.result_winners;
         const registrationOpen = !room.archived && !interrupted && !room.result_winners && !!room.open && Date.now() < room.join_expires;
         if (action === 'join' && request.method === 'POST') {
           if (!registrationOpen) fail('报名已结束', 409);
@@ -88,7 +89,7 @@ export default {
         }
         const owner = request.headers.get('authorization') === `Bearer ${room.owner}`;
         if (request.method === 'GET') {
-          if (owner && !interrupted && !room.archived) await db.prepare(`UPDATE rooms SET active_until = CASE WHEN result_winners IS NULL THEN ? ELSE NULL END WHERE id = ? AND archived = 0 AND expires > ${SQL_NOW} AND (result_winners IS NOT NULL OR active_until IS NULL OR active_until > ${SQL_NOW})`).bind(Date.now() + SESSION_LEASE, id).run();
+          if (owner && !hostGone && !room.archived) await db.prepare(`UPDATE rooms SET active_until = ? WHERE id = ? AND archived = 0 AND expires > ${SQL_NOW} AND (active_until IS NULL OR active_until > ${SQL_NOW})`).bind(Date.now() + SESSION_LEASE, id).run();
           const snapshot = await db.batch([
             db.prepare(`SELECT *, (archived = 0 AND open = 1 AND result_winners IS NULL AND join_expires > ${SQL_NOW} AND (active_until IS NULL OR active_until > ${SQL_NOW})) AS registration_open FROM rooms WHERE id = ? AND expires > ${SQL_NOW}`).bind(id),
             db.prepare(owner ? 'SELECT id, name FROM participants WHERE room_id = ? ORDER BY seq' : 'SELECT COUNT(*) AS count FROM participants WHERE room_id = ?').bind(id),
@@ -98,7 +99,8 @@ export default {
           const result = current.result_winners ? { winners: JSON.parse(current.result_winners), timestamp: current.result_timestamp } : null;
           const voter = !owner && voterToken(request);
           const participant = voter ? await db.prepare('SELECT id, name FROM participants WHERE room_id = ? AND voter = ?').bind(id, voter).first() : null;
-          const state = result ? 'drawn' : current.archived ? 'ended' : (current.active_until !== null && current.active_until <= Date.now()) ? 'interrupted' : current.registration_open ? 'open' : 'closed';
+          const inactive = current.active_until !== null && current.active_until <= Date.now();
+          const state = current.archived || (inactive && result) ? 'ended' : result ? 'drawn' : inactive ? 'interrupted' : current.registration_open ? 'open' : 'closed';
           // Never serialize the full result for a visitor, including an unregistered browser.
           const rounds = participant && result ? (await db.prepare('SELECT timestamp, winners FROM room_draws WHERE room_id = ? ORDER BY seq').bind(id).all()).results : [];
           const history = rounds.map((draw, index) => ({ round: index + 1, timestamp: draw.timestamp,
@@ -139,11 +141,11 @@ export default {
               return send(200, { participants: roster, open: false, result });
             }
             if (room.result_timestamp !== null && result.timestamp <= room.result_timestamp) fail('开奖时间早于已公布的轮次，请重新抽奖', 409);
-            const updated = await db.prepare(`UPDATE rooms SET open = 0, result_winners = ?, result_timestamp = ?, active_until = NULL
+            const updated = await db.prepare(`UPDATE rooms SET open = 0, result_winners = ?, result_timestamp = ?, active_until = ?
               WHERE id = ? AND archived = 0 AND expires > ${SQL_NOW} AND (active_until IS NULL OR active_until > ${SQL_NOW})
               AND (result_timestamp IS NULL OR result_timestamp < ?)
               AND (SELECT COUNT(*) FROM participants WHERE room_id = rooms.id AND id IN (SELECT value FROM json_each(?))) = ? RETURNING open`)
-              .bind(JSON.stringify(result.winners), result.timestamp, id, result.timestamp, JSON.stringify(ids), ids.length).first();
+              .bind(JSON.stringify(result.winners), result.timestamp, Date.now() + SESSION_LEASE, id, result.timestamp, JSON.stringify(ids), ids.length).first();
             if (!updated) {
               // A concurrent retry may have committed the same round while this request was waiting.
               const concurrent = await db.prepare('SELECT winners FROM room_draws WHERE room_id = ? AND timestamp = ?').bind(id, result.timestamp).first();
@@ -153,7 +155,7 @@ export default {
             return send(200, { participants: participants.results, open: false, result });
           }
           const snapshot = await db.batch([
-            db.prepare(`UPDATE rooms SET open = (? = 1 AND join_expires > ${SQL_NOW} AND result_winners IS NULL), active_until = CASE WHEN result_winners IS NULL THEN ? ELSE NULL END
+            db.prepare(`UPDATE rooms SET open = (? = 1 AND join_expires > ${SQL_NOW} AND result_winners IS NULL), active_until = ?
               WHERE id = ? AND archived = 0 AND expires > ${SQL_NOW} AND (active_until IS NULL OR active_until > ${SQL_NOW}) RETURNING open`)
               .bind(body?.open === true ? 1 : 0, Date.now() + SESSION_LEASE, id),
             db.prepare('SELECT id, name FROM participants WHERE room_id = ? ORDER BY seq').bind(id),

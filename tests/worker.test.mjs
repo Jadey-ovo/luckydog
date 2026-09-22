@@ -37,7 +37,7 @@ const cookie = n => ({ Cookie: `luckydog-voter=${n.toString(16).padStart(48, '0'
 test('v5 migration preserves creation deadline and maps historical winner identity', async () => {
   const row = await db.prepare('SELECT * FROM rooms WHERE id = ?').bind('legacy').first();
   assert.ok(Math.abs(row.expires - Date.now() - 86400000) < 5000);
-  assert.equal(row.active_until, null);
+  assert.ok(row.active_until > Date.now() && row.active_until <= Date.now() + 90000);
   assert.deepEqual(JSON.parse(row.result_winners), [{ id:'legacy-person',name:'迁移演示' }]);
   const history = await db.prepare('SELECT timestamp, winners FROM room_draws WHERE room_id = ?').bind('legacy').all();
   assert.deepEqual(history.results, [{ timestamp:123, winners:row.result_winners }]);
@@ -137,8 +137,13 @@ test('personal results, latest replacement, fixed retention and safe interruptio
   assert.equal((await api(`rooms/${room.id}`, 'PATCH', { result: { winners: [{ id: 'fake', name: '甲' }], timestamp: 10 } }, ownerHeaders(room))).status, 400);
   assert.equal((await api(`rooms/${room.id}`, 'PATCH', { open: true }, ownerHeaders(room))).value.open, false);
   assert.equal((await api(`rooms/${room.id}/join`, 'POST', { name: '开奖后来客' })).status, 409);
-  // Completed results do not require heartbeats and retain the original expiry.
-  assert.equal((await db.prepare('SELECT active_until FROM rooms WHERE id = ?').bind(room.id).first()).active_until, null);
+  // A completed round is still an active activity until the host clears it or its lease expires.
+  assert.ok((await db.prepare('SELECT active_until FROM rooms WHERE id = ?').bind(room.id).first()).active_until > Date.now());
+  await db.prepare('UPDATE rooms SET active_until = 0 WHERE id = ?').bind(room.id).run();
+  const ended = (await api(`rooms/${room.id}`, 'GET', undefined, cookie(81))).value;
+  assert.equal(ended.state, 'ended');
+  assert.equal(ended.history.length, 3);
+  assert.equal((await api(`rooms/${room.id}`, 'PATCH', { result: { winners: [roster[0]], timestamp: 999 } }, ownerHeaders(room))).status, 409);
   await db.prepare('UPDATE rooms SET expires = ? WHERE id = ?').bind(Date.now(), room.id).run();
   assert.equal((await api(`rooms/${room.id}`)).status, 404);
   const abandoned = await create();

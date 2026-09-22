@@ -160,7 +160,7 @@ test('slow first request never flashes a closed state; recoverable errors and mo
  await expect(page.getByRole('heading',{name:'活动已失效'})).toBeVisible();
 });
 
-test('personal result changes, refresh and host close preserve results without disclosing others',async({page,browser,request})=>{
+test('personal rounds remain active until the host ends them and stay private afterward',async({page,browser,request})=>{
  const created=page.waitForResponse(response=>response.url().endsWith('/api/rooms')&&response.request().method()==='POST');
  await createInvite(page);const room=await (await created).json();
  const path=`/api/rooms/${room.id}`;const auth={Authorization:`Bearer ${room.owner}`};
@@ -172,11 +172,15 @@ test('personal result changes, refresh and host close preserve results without d
  const roster=(await (await request.get(path,{headers:auth})).json()).participants;
  const publish=async(name:string)=>{expect((await request.patch(path,{headers:auth,data:{result:{winners:roster.filter((p:any)=>p.name===name),timestamp:Date.now()}}})).ok()).toBe(true);};
  await publish('演示小熊');await expect(visitor.getByRole('heading',{name:'本轮未中奖'})).toBeVisible();
+ await expect(visitor.getByText('活动仍在进行 · 已开奖')).toBeVisible();
  await expect(visitor.getByText('演示小熊')).toHaveCount(0);
  await publish('演示小鹿');await expect(visitor.getByRole('heading',{name:'恭喜你中奖啦'})).toBeVisible();
  await visitor.reload();await expect(visitor.getByRole('heading',{name:'恭喜你中奖啦'})).toBeVisible();
- await page.reload();await expect(page.getByRole('button',{name:'创建抽奖邀请'})).toBeVisible();
+ expect((await request.patch(path,{headers:auth,data:{archive:true}})).ok()).toBe(true);
+ await expect(visitor.getByText('活动已结束',{exact:true})).toBeVisible();
  await visitor.reload();await expect(visitor.getByRole('heading',{name:'恭喜你中奖啦'})).toBeVisible();
+ await expect(visitor.getByText('活动已结束',{exact:true})).toBeVisible();
+ await page.reload();await expect(page.getByRole('button',{name:'创建抽奖邀请'})).toBeVisible();
  await page.goto(`./#join=${room.id}`);await expect(page.getByRole('heading',{name:'活动已结束'})).toBeVisible();
  await expect(page.getByText(/演示小鹿|演示小熊/)).toHaveCount(0);
  await page.close();await visitor.reload();await expect(visitor.getByRole('heading',{name:'恭喜你中奖啦'})).toBeVisible();

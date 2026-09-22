@@ -5,7 +5,7 @@ UPDATE rooms SET result_winners = (
   SELECT json_group_array(json_object('id', p.id, 'name', p.name))
   FROM json_each(rooms.result_winners) w JOIN participants p
   ON p.room_id = rooms.id AND p.name = json_extract(w.value, '$.name')
-), active_until = NULL WHERE result_winners IS NOT NULL;
+), active_until = MIN(expires, CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) + 90000) WHERE result_winners IS NOT NULL;
 DROP TRIGGER registration_guard;
 CREATE TRIGGER registration_guard BEFORE INSERT ON participants BEGIN
   SELECT RAISE(ABORT, 'ROOM_GONE') WHERE NOT EXISTS (
